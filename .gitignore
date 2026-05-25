@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Local crew config (may contain MCP tokens / per-project settings)
+.crew/*
+!.crew/mcp.example.json
+
+# Env & secrets
+.env
+.env.*
+
+# OS
+.DS_Store
