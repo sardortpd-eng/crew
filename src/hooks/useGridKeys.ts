@@ -8,8 +8,8 @@ const PAGE_LINES = 8;
  * Keyboard navigation for grid view. Active only when the grid is shown and the
  * prompt is not focused, so digits/arrows move between panes instead of typing.
  *
- * Tab/Shift+Tab cycle panes; arrows move by grid cell; 1–9 jump to a pane;
- * PgUp/PgDn scroll the focused pane's history.
+ * Tab and arrows move between panes; 1–9 jump to a pane; PgUp/PgDn scroll the
+ * focused pane's history. (Shift+Tab is reserved globally for the safety mode.)
  */
 export function useGridKeys(active: boolean): void {
   useInput(
@@ -30,7 +30,7 @@ export function useGridKeys(active: boolean): void {
         return;
       }
 
-      if (key.tab && key.shift) return moveFocus(index, -1, agents, focus);
+      if (key.tab && key.shift) return; // Shift+Tab is reserved for the safety-mode cycle
       if (key.tab) return moveFocus(index, +1, agents, focus);
       if (key.rightArrow) return moveFocus(index, +1, agents, focus);
       if (key.leftArrow) return moveFocus(index, -1, agents, focus);

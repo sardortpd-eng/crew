@@ -1,3 +1,5 @@
+import type { SafetyMode } from "../state/store.ts";
+
 /** A `/preset` sub-operation. Semantic validation happens in the handler. */
 export type PresetOp =
   | { readonly type: "list" }
@@ -27,6 +29,7 @@ export type Command =
   | { readonly kind: "verify"; readonly toggle?: "on" | "off"; readonly id?: string }
   | { readonly kind: "route"; readonly prompt: string }
   | { readonly kind: "mcp" }
+  | { readonly kind: "mode"; readonly mode?: SafetyMode }
   | { readonly kind: "help" }
   | { readonly kind: "quit" }
   | { readonly kind: "message"; readonly text: string }
@@ -79,6 +82,15 @@ export function parseCommand(raw: string): Command {
       return { kind: "route", prompt: args };
     case "mcp":
       return { kind: "mcp" };
+    case "mode": {
+      const arg = rest[0]?.toLowerCase();
+      if (!arg) return { kind: "mode" }; // cycle
+      const mode = parseSafetyMode(arg);
+      if (!mode) {
+        return { kind: "error", message: "Usage: /mode [normal|plan|auto-edit|bypass]" };
+      }
+      return { kind: "mode", mode };
+    }
     case "help":
     case "?":
       return { kind: "help" };
@@ -88,6 +100,28 @@ export function parseCommand(raw: string): Command {
       return { kind: "quit" };
     default:
       return { kind: "error", message: `Unknown command: /${name}` };
+  }
+}
+
+/** Maps a `/mode` argument (with aliases) to a {@link SafetyMode}, or null. */
+function parseSafetyMode(arg: string): SafetyMode | null {
+  switch (arg) {
+    case "normal":
+    case "default":
+      return "normal";
+    case "plan":
+      return "plan";
+    case "auto-edit":
+    case "auto":
+    case "acceptedits":
+    case "accept-edits":
+      return "acceptEdits";
+    case "bypass":
+    case "yolo":
+    case "bypasspermissions":
+      return "bypassPermissions";
+    default:
+      return null;
   }
 }
 
@@ -138,6 +172,7 @@ export const HELP_TEXT = [
   "/verify [id|on|off]      run quality gates now, or toggle auto-verify",
   "/route <prompt>          force crew to auto-assign an agent for a prompt",
   "/mcp                     show configured MCP servers + connection status",
+  "/mode [normal|plan|auto-edit|bypass]   set the safety mode (Shift+Tab cycles)",
   "/help                    show this help",
   "/quit                    exit crew",
   "<text>                   message the focused agent",

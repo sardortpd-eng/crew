@@ -10,6 +10,24 @@ import type {
 /** Which layout the viewer is showing. */
 export type ViewMode = "grid" | "focus";
 
+/**
+ * Session-wide safety level (cycled with Shift+Tab), overriding each agent's
+ * preset permission mode:
+ * - `normal` — agents use their preset's own mode (crew's default)
+ * - `plan` — read-only everywhere; no edits or shell
+ * - `acceptEdits` — every agent auto-accepts edits
+ * - `bypassPermissions` — skip all approval prompts (dangerous)
+ */
+export type SafetyMode = "normal" | "plan" | "acceptEdits" | "bypassPermissions";
+
+/** Cycle order for Shift+Tab. */
+export const SAFETY_MODES: readonly SafetyMode[] = [
+  "normal",
+  "plan",
+  "acceptEdits",
+  "bypassPermissions",
+];
+
 /** Accumulated cost/token usage for one agent. */
 export type AgentStats = {
   readonly costUsd: number;
@@ -69,6 +87,7 @@ type StoreState = {
   readonly verify: Readonly<Record<string, VerifyState>>;
   readonly routerStatus: string | null;
   readonly mcpStatus: readonly McpServerStatus[];
+  readonly safetyMode: SafetyMode;
 
   addAgent: (id: string, presetName: string) => void;
   removeAgent: (id: string) => void;
@@ -97,6 +116,8 @@ type StoreState = {
   clearVerify: (id: string) => void;
   setRouterStatus: (status: string | null) => void;
   setMcpStatus: (servers: readonly McpServerStatus[]) => void;
+  setSafetyMode: (mode: SafetyMode) => void;
+  cycleSafetyMode: () => void;
 };
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -113,6 +134,7 @@ export const useStore = create<StoreState>((set, get) => ({
   verify: {},
   routerStatus: null,
   mcpStatus: [],
+  safetyMode: "normal",
 
   addAgent: (id, presetName) =>
     set((s) => ({
@@ -241,6 +263,14 @@ export const useStore = create<StoreState>((set, get) => ({
   setRouterStatus: (status) => set({ routerStatus: status }),
 
   setMcpStatus: (servers) => set({ mcpStatus: servers }),
+
+  setSafetyMode: (mode) => set({ safetyMode: mode }),
+
+  cycleSafetyMode: () =>
+    set((s) => {
+      const i = SAFETY_MODES.indexOf(s.safetyMode);
+      return { safetyMode: SAFETY_MODES[(i + 1) % SAFETY_MODES.length] ?? "normal" };
+    }),
 }));
 
 type Messages = Readonly<Record<string, readonly Message[]>>;

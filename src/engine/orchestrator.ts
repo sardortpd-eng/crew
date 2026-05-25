@@ -1,4 +1,4 @@
-import type { CanUseTool, SettingSource } from "@anthropic-ai/claude-agent-sdk";
+import type { CanUseTool, PermissionMode, SettingSource } from "@anthropic-ai/claude-agent-sdk";
 import { AgentSession } from "./agentSession.ts";
 import { subscriptionEnv } from "./env.ts";
 import type { Preset } from "./presets.ts";
@@ -13,6 +13,12 @@ export type OrchestratorConfig = {
   readonly mcpServers?: Readonly<Record<string, McpServerConfig>>;
   /** Filesystem settings to load (CLAUDE.md, project `.mcp.json`, etc.). */
   readonly settingSources?: readonly SettingSource[];
+  /**
+   * Session-wide permission-mode override (the safety toggle). Returns undefined
+   * to use each preset's own mode. Read at send time so it always reflects the
+   * current toggle.
+   */
+  readonly resolvePermissionMode?: () => PermissionMode | undefined;
 };
 
 /**
@@ -95,11 +101,14 @@ export class Orchestrator {
   /** Builds immutable SDK options from an agent's preset (no preset mutation). */
   private buildOptions(agent: SpawnedAgent): Options {
     const { preset } = agent;
+    // The session-wide safety toggle overrides the preset's mode when set.
+    const permissionMode = this.config.resolvePermissionMode?.() ?? preset.permissionMode;
     return {
       model: preset.model,
       systemPrompt: preset.systemPrompt,
       allowedTools: [...preset.allowedTools],
-      permissionMode: preset.permissionMode,
+      permissionMode,
+      ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
       includePartialMessages: true,
       ...(this.config.cwd ? { cwd: this.config.cwd } : {}),
       ...(this.config.makeCanUseTool ? { canUseTool: this.config.makeCanUseTool(agent) } : {}),

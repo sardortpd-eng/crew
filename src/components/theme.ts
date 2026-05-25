@@ -1,8 +1,36 @@
 import type { AgentStatus } from "../engine/types.ts";
-import type { VerifyState } from "../state/store.ts";
+import type { SafetyMode, VerifyState } from "../state/store.ts";
 
 /** Claude Code's warm coral accent. */
 export const ACCENT = "#D97757";
+
+/** Short label for the safety mode badge. */
+export function safetyLabel(mode: SafetyMode): string {
+  switch (mode) {
+    case "plan":
+      return "plan";
+    case "acceptEdits":
+      return "auto-edit";
+    case "bypassPermissions":
+      return "bypass ⚠";
+    default:
+      return "normal";
+  }
+}
+
+/** Color for the safety mode badge (bypass is a red warning). */
+export function safetyColor(mode: SafetyMode): string {
+  switch (mode) {
+    case "plan":
+      return "cyan";
+    case "acceptEdits":
+      return ACCENT;
+    case "bypassPermissions":
+      return "red";
+    default:
+      return "gray";
+  }
+}
 
 /** Glyph for a verify status: running / passed / failed. */
 export function verifyGlyph(status: VerifyState["status"]): string {

@@ -37,6 +37,11 @@ export function useCrew(cwd: string) {
       cwd,
       mcpServers: mcp.mcpServers,
       settingSources: mcp.settingSources,
+      // Session-wide safety toggle: "normal" → each preset decides; else override.
+      resolvePermissionMode: () => {
+        const mode = useStore.getState().safetyMode;
+        return mode === "normal" ? undefined : mode;
+      },
       makeCanUseTool: (agent) =>
         createPermissionHandler({
           allowedTools: [], // preset allowlist is enforced by the SDK; gate the rest
@@ -189,6 +194,12 @@ export function useCrew(cwd: string) {
         return {};
       case "mcp":
         return { notice: describeMcp(mcpServersRef.current) };
+      case "mode": {
+        const store = useStore.getState();
+        if (command.mode) store.setSafetyMode(command.mode);
+        else store.cycleSafetyMode();
+        return { notice: `Safety mode: ${useStore.getState().safetyMode}` };
+      }
       case "spawn":
         return spawn(command.preset, command.task);
       case "broadcast":

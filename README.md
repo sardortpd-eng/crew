@@ -79,6 +79,7 @@ In grid view the prompt starts in **nav mode** so the keyboard drives the panes:
 | `/broadcast <task>` | Send the same task to **every** agent in parallel |
 | `/focus <id\|number>` | Switch the focused agent |
 | `/view [grid\|focus]` | Switch layout (also `Ctrl+G`) |
+| `/mode [normal\|plan\|auto-edit\|bypass]` | Set the safety mode (Shift+Tab cycles) |
 | `/verify [id\|on\|off]` | Run quality gates now, or toggle auto-verify |
 | `/route <prompt>` | Force crew to auto-assign the best agent for a prompt |
 | `/stop [id]` | Abort the focused agent's turn (or one by id) |
@@ -169,11 +170,26 @@ failure, hands the error back to that agent to fix — repeating until green or 
 - Status shows inline — `⟳ verifying` / `✓ verified` / `✗ failing` — in the focus view and
   as a glyph in each grid pane header. `/verify` runs it manually; `/verify off` disables auto.
 
+### Safety modes
+
+A session-wide safety level (like Claude Code's permission modes) overrides every
+agent's preset. Cycle it with **Shift+Tab**, or set it with `/mode`. The current mode
+shows in the header bar.
+
+| Mode | Behavior |
+|------|----------|
+| `normal` | Each agent uses its own preset's mode (the default) |
+| `plan` | Read-only everywhere — agents can read and plan, but not edit or run commands |
+| `auto-edit` | Every agent auto-accepts edits (`acceptEdits`) |
+| `bypass` ⚠ | Skip all approval prompts (`bypassPermissions`) — fast and dangerous |
+
+`/mode` cycles; `/mode plan` · `/mode auto-edit` · `/mode bypass` · `/mode normal` set directly.
+
 ### Permissions
 
 Tools outside a preset's allowlist trigger an inline **allow / deny** prompt
 (`[y]`/`[n]`). Unanswered prompts auto-deny after 60s, so a forgotten approval never
-blocks an agent.
+blocks an agent. The safety mode above can override this for the whole session.
 
 ### MCP servers & external tools
 

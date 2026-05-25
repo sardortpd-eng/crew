@@ -46,7 +46,14 @@ export function App({ cwd }: { cwd: string }) {
   }, [grid]);
 
   useInput((input, key) => {
-    if (key.ctrl && input === "c") return exit();
+    if (key.ctrl && input === "c") {
+      exit();
+      return;
+    }
+    if (key.tab && key.shift) {
+      useStore.getState().cycleSafetyMode(); // Shift+Tab cycles the safety mode
+      return;
+    }
     if (key.ctrl && input === "g") {
       useStore.getState().toggleViewMode();
       setTyping(false);
@@ -128,10 +135,10 @@ function Hint({
   const text = hasPending
     ? "y allow · n deny"
     : grid
-      ? "Ctrl+G focus view · /broadcast to fan out · esc to interrupt"
+      ? "Shift+Tab safety mode · Ctrl+G focus view · /broadcast · esc to interrupt"
       : hasAgents
-        ? "Ctrl+G grid view · /broadcast to fan out · /focus <n> · esc to interrupt"
-        : "/help for commands · /spawn to add agents · ctrl+c to exit";
+        ? "Shift+Tab safety mode · Ctrl+G grid · /focus <n> · esc to interrupt"
+        : "/help for commands · /spawn to add agents · Shift+Tab safety mode";
   return (
     <Box paddingX={1}>
       <Text dimColor>{text}</Text>

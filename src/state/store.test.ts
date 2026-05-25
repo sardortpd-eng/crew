@@ -16,6 +16,7 @@ const reset = () =>
     verify: {},
     routerStatus: null,
     mcpStatus: [],
+    safetyMode: "normal",
   });
 
 const s = () => useStore.getState();
@@ -199,6 +200,23 @@ describe("store", () => {
   test("setAccount stores subscription info", () => {
     s().setAccount({ subscriptionType: "Max", email: "x@y.z" });
     expect(s().account?.subscriptionType).toBe("Max");
+  });
+
+  test("cycleSafetyMode walks normal→plan→acceptEdits→bypass→normal", () => {
+    expect(s().safetyMode).toBe("normal");
+    s().cycleSafetyMode();
+    expect(s().safetyMode).toBe("plan");
+    s().cycleSafetyMode();
+    expect(s().safetyMode).toBe("acceptEdits");
+    s().cycleSafetyMode();
+    expect(s().safetyMode).toBe("bypassPermissions");
+    s().cycleSafetyMode();
+    expect(s().safetyMode).toBe("normal");
+  });
+
+  test("setSafetyMode sets directly", () => {
+    s().setSafetyMode("bypassPermissions");
+    expect(s().safetyMode).toBe("bypassPermissions");
   });
 
   test("removeAgent clears scroll and stats too", () => {

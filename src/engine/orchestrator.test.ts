@@ -78,6 +78,27 @@ describe("Orchestrator", () => {
     delete process.env.ANTHROPIC_API_KEY;
   });
 
+  test("resolvePermissionMode overrides the preset mode; bypass sets the danger flag", async () => {
+    let mode: "plan" | "bypassPermissions" | undefined;
+    const query = makeMockQuery([resultSuccess("ok")]);
+    const orch = new Orchestrator({ queryFn: query, resolvePermissionMode: () => mode });
+    const agent = orch.spawn(coder()); // preset mode is acceptEdits
+
+    mode = undefined; // normal → use preset
+    await orch.send(agent.id, "a");
+    expect(query.calls[0]?.options?.permissionMode).toBe("acceptEdits");
+    expect(query.calls[0]?.options?.allowDangerouslySkipPermissions).toBeUndefined();
+
+    mode = "plan";
+    await orch.send(agent.id, "b");
+    expect(query.calls[1]?.options?.permissionMode).toBe("plan");
+
+    mode = "bypassPermissions";
+    await orch.send(agent.id, "c");
+    expect(query.calls[2]?.options?.permissionMode).toBe("bypassPermissions");
+    expect(query.calls[2]?.options?.allowDangerouslySkipPermissions).toBe(true);
+  });
+
   test("resume id flows through on a second send to the same agent", async () => {
     const query = makeMockQuery([resultSuccess("ok", "sess-7")]);
     const orch = new Orchestrator({ queryFn: query });
