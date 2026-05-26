@@ -51,6 +51,11 @@ export const COMMAND_CATALOG: readonly CommandSpec[] = [
   },
   { name: "tasks", summary: "Show the task board" },
   { name: "verify", args: "[id|on|off]", summary: "Run quality gates now, or toggle auto-verify" },
+  {
+    name: "review",
+    args: "<agent>",
+    summary: "Have the reviewer agent review another agent's changes",
+  },
   { name: "route", args: "<prompt>", summary: "Force crew to auto-assign the best agent" },
   {
     name: "mcp",

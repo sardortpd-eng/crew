@@ -24,6 +24,7 @@ async function main(): Promise<void> {
     listTeam: () => ({ presets: [{ name: "coder", description: "writes code" }], agents: [] }),
     assign: async () => ({ ok: true, agentId: "coder-1", result: "ok", errored: false }),
     verify: async () => ({ status: "passed" }),
+    review: async () => "approve",
   });
 
   console.error("\n=== lead wiring smoke ===\n→ booting the lead agent…");

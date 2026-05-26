@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   createLeadServer,
   formatAssign,
+  formatReview,
   formatTeam,
   formatVerify,
   LEAD_SERVER_NAME,
@@ -52,12 +53,23 @@ describe("formatVerify", () => {
   });
 });
 
+describe("formatReview", () => {
+  test("renders the findings under a heading", () => {
+    expect(formatReview("coder-1", "CRITICAL: foo")).toBe("review of coder-1:\nCRITICAL: foo");
+  });
+
+  test("handles empty findings", () => {
+    expect(formatReview("coder-1", "")).toContain("no findings");
+  });
+});
+
 describe("createLeadServer", () => {
   test("builds an in-process MCP server named 'crew'", () => {
     const deps: LeadDeps = {
       listTeam: () => ({ presets: [], agents: [] }),
       assign: async () => ({ ok: true, agentId: "x", result: "", errored: false }),
       verify: async () => ({ status: "passed" }),
+      review: async () => "approve",
     };
     const server = createLeadServer(deps);
     expect(server.name).toBe(LEAD_SERVER_NAME);

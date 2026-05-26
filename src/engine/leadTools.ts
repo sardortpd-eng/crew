@@ -33,6 +33,8 @@ export type LeadDeps = {
   }) => Promise<AssignResult>;
   /** Run the quality gates on an agent's work. */
   readonly verify: (agentId: string) => Promise<{ status: string; gate?: string }>;
+  /** Have the reviewer agent review another agent's changes; returns findings. */
+  readonly review: (agentId: string) => Promise<string>;
 };
 
 /** The MCP server name; tools surface to the lead as `mcp__crew__<tool>`. */
@@ -64,6 +66,11 @@ export function formatAssign(r: AssignResult): string {
 /** Renders a verify outcome for the `verify` tool. */
 export function formatVerify(agentId: string, v: { status: string; gate?: string }): string {
   return `verify ${agentId}: ${v.status}${v.gate ? ` (${v.gate})` : ""}`;
+}
+
+/** Renders the reviewer's findings for the `review` tool. */
+export function formatReview(agentId: string, findings: string): string {
+  return `review of ${agentId}:\n${findings || "(no findings returned)"}`;
 }
 
 /** Builds the in-process MCP server exposing the lead's orchestration tools. */
@@ -101,6 +108,13 @@ export function createLeadServer(deps: LeadDeps) {
           "Returns pass/fail so you can decide whether to reassign fixes.",
         { agentId: z.string().describe("The agent whose work to verify.") },
         async (args) => text(formatVerify(args.agentId, await deps.verify(args.agentId))),
+      ),
+      tool(
+        "review",
+        "Have the read-only reviewer agent review another agent's changes and return its " +
+          "findings (issues by severity + a verdict). Use before integrating risky work.",
+        { agentId: z.string().describe("The agent whose changes to review.") },
+        async (args) => text(formatReview(args.agentId, await deps.review(args.agentId))),
       ),
     ],
   });

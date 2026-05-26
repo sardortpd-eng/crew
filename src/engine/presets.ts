@@ -52,7 +52,8 @@ const BUILTINS: readonly Preset[] = [
       "`assign` tool. Call `list_team` first to see the roles you can hire and who's already on " +
       "the team. Reuse an agent for related follow-ups by passing its agentId.\n" +
       "3. After a builder finishes, call `verify` to confirm the build/types/tests pass; if it " +
-      "fails, reassign a targeted fix to the same agent and verify again.\n" +
+      "fails, reassign a targeted fix to the same agent and verify again. For risky or security-" +
+      "sensitive work, call `review` to get a second opinion before integrating.\n" +
       "4. Keep the team small and the plan minimal — never hire an agent you don't need, and " +
       "stop as soon as the goal is met. You do NOT edit files yourself; you delegate, review, " +
       "and integrate.\n" +
@@ -64,6 +65,7 @@ const BUILTINS: readonly Preset[] = [
       "mcp__crew__list_team",
       "mcp__crew__assign",
       "mcp__crew__verify",
+      "mcp__crew__review",
     ],
     permissionMode: "default",
   },

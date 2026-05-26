@@ -134,7 +134,12 @@ export function useCrew(cwd: string) {
   if (!leadServerRef.current) {
     leadServerRef.current = true;
     orchestrator.setLeadServer(
-      createLeadServer({ listTeam, assign: assignToSpecialist, verify: verifyForLead }),
+      createLeadServer({
+        listTeam,
+        assign: assignToSpecialist,
+        verify: verifyForLead,
+        review: reviewAgent,
+      }),
     );
   }
 
@@ -604,6 +609,34 @@ export function useCrew(cwd: string) {
     return { ok: true, agentId: id, result, errored };
   }
 
+  /**
+   * Has the read-only reviewer agent review another agent's changes. Points the
+   * reviewer at the target's working tree (its worktree, else the shared root)
+   * so it reads the right files. The findings land in the reviewer's transcript
+   * and are also returned (for the lead's `review` tool).
+   */
+  async function reviewAgent(targetId: string): Promise<string> {
+    if (!orchestrator.get(targetId)) return `Unknown agent "${targetId}".`;
+    const preset = getPreset("reviewer");
+    if (!preset) return "Reviewer preset unavailable.";
+    const diff = worktrees.has(targetId)
+      ? await worktrees.diff(targetId)
+      : await checkpoints.diff();
+    const reviewerId = ensureAgent(preset);
+    if (reviewerId === targetId) return "Cannot review the reviewer itself.";
+    orchestrator.setAgentCwd(reviewerId, worktrees.pathFor(targetId) ?? cwd);
+    useStore.getState().focus(reviewerId);
+    autoView();
+    const prompt =
+      `Review the latest changes by ${targetId} (read-only). Changed files:\n` +
+      `${diff || "(no recorded diff — inspect the working tree)"}\n\n` +
+      "Read the changed files and report issues grouped by severity " +
+      "(CRITICAL/HIGH/MEDIUM/LOW) with file:line and a concrete fix. " +
+      "End with a verdict: approve / changes requested / block.";
+    await sendAndSettle(reviewerId, prompt);
+    return captureResult(reviewerId).result;
+  }
+
   /** Runs the quality gates on an agent's work and reports pass/fail to the lead. */
   async function verifyForLead(agentId: string): Promise<{ status: string; gate?: string }> {
     if (!orchestrator.get(agentId)) return { status: "unknown-agent" };
@@ -832,6 +865,12 @@ export function useCrew(cwd: string) {
         if (!id) return { notice: `No agent matching "${command.agent}".` };
         void mergeWorktree(id);
         return {};
+      }
+      case "review": {
+        const id = resolveId(command.agent);
+        if (!id) return { notice: `No agent matching "${command.agent}".` };
+        void reviewAgent(id);
+        return { notice: `Reviewing ${id}'s work — findings appear in the reviewer pane.` };
       }
       case "worktrees": {
         const action = command.action ?? "list";
