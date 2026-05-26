@@ -67,7 +67,8 @@ export function flattenMessages(
       pushWrapped(out, "error", `✗ ${message.text}`, width);
     } else {
       for (const tool of message.tools) {
-        pushWrapped(out, "tool", `⏺ ${tool.name}`, width);
+        const summary = summarizeToolInput(tool.input);
+        pushWrapped(out, "tool", `⏺ ${tool.name}${summary ? ` ${summary}` : ""}`, width);
         const detail = toolResults[tool.id] ?? "running…";
         pushWrapped(out, "toolResult", `  ⎿ ${detail}`, width);
       }
@@ -79,6 +80,21 @@ export function flattenMessages(
 
 function pushWrapped(out: RenderLine[], kind: LineKind, text: string, width: number): void {
   for (const line of wrapText(text, width)) out.push({ kind, text: line });
+}
+
+const MAX_TOOL_SUMMARY = 72;
+const TELLING_KEYS = ["command", "file_path", "path", "pattern", "query", "url"] as const;
+
+/** The most telling field of a tool's input, for a one-line summary ("" if none). */
+export function summarizeToolInput(input: Record<string, unknown>): string {
+  const key = TELLING_KEYS.find((k) => typeof input[k] === "string");
+  if (key) return truncateSummary(String(input[key]));
+  if (Object.keys(input).length === 0) return "";
+  return truncateSummary(JSON.stringify(input));
+}
+
+function truncateSummary(value: string): string {
+  return value.length > MAX_TOOL_SUMMARY ? `${value.slice(0, MAX_TOOL_SUMMARY)}…` : value;
 }
 
 /** Keeps a scroll offset within `[0, max]` for the given content/viewport. */

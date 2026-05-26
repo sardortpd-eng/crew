@@ -51,6 +51,20 @@ export function App({ cwd }: { cwd: string }) {
       ? [...noticeLines.slice(0, maxNoticeRows - 1), "… (resize the terminal to see the rest)"]
       : noticeLines;
 
+  // Height budget for the focus transcript: terminal rows minus the chrome that
+  // renders around it, so AgentPane (a fixed-height windowed pane) + the rest
+  // never exceeds the viewport. Over-reserve slightly — bias toward safe.
+  const taskCount = useStore((s) => s.tasks.length);
+  const reserved =
+    9 + // header(2) + input(4) + hint(1) + fudge(2)
+    (agents.length > 0 ? 2 : 0) + // AgentBar
+    (taskCount > 0 ? taskCount + 1 : 0) + // TaskBoard
+    (busy ? 2 : 0) + // StatusLine
+    1 + // VerifyLine (reserve even when idle)
+    (routerStatus ? 1 : 0) +
+    (noticeLines.length > 0 ? noticeLines.length + 1 : 0); // short inline notice
+  const bodyRows = Math.max(3, rows - reserved);
+
   useAltScreen(true);
   useGridKeys(grid && !inputActive && !hasPending);
 
@@ -130,7 +144,7 @@ export function App({ cwd }: { cwd: string }) {
         <>
           {!grid && <AgentBar />}
 
-          {grid ? <GridView /> : <AgentPane />}
+          {grid ? <GridView /> : <AgentPane height={bodyRows} />}
 
           {!grid && <TaskBoard />}
 

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { Message } from "../state/store.ts";
-import { clampScroll, flattenMessages, windowLines, wrapText } from "./windowing.ts";
+import {
+  clampScroll,
+  flattenMessages,
+  summarizeToolInput,
+  windowLines,
+  wrapText,
+} from "./windowing.ts";
 
 describe("wrapText", () => {
   test("wraps on word boundaries", () => {
@@ -46,6 +52,35 @@ describe("flattenMessages", () => {
   test("shows running… when no tool result yet", () => {
     const lines = flattenMessages(messages, 80, {});
     expect(lines.find((l) => l.kind === "toolResult")?.text).toContain("running…");
+  });
+
+  test("includes a tool-input summary on the tool line", () => {
+    const withInput: Message[] = [
+      {
+        role: "assistant",
+        text: "",
+        tools: [{ id: "t1", name: "Bash", input: { command: "bun test" } }],
+        done: true,
+      },
+    ];
+    const toolLine = flattenMessages(withInput, 80, {}).find((l) => l.kind === "tool");
+    expect(toolLine?.text).toContain("Bash");
+    expect(toolLine?.text).toContain("bun test");
+  });
+});
+
+describe("summarizeToolInput", () => {
+  test("picks the most telling field", () => {
+    expect(summarizeToolInput({ command: "ls -la" })).toBe("ls -la");
+    expect(summarizeToolInput({ file_path: "/a/b.ts" })).toBe("/a/b.ts");
+  });
+
+  test("empty input yields no summary", () => {
+    expect(summarizeToolInput({})).toBe("");
+  });
+
+  test("truncates very long values", () => {
+    expect(summarizeToolInput({ command: "x".repeat(200) }).endsWith("…")).toBe(true);
   });
 });
 
