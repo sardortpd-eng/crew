@@ -89,6 +89,8 @@ In grid view the prompt starts in **nav mode** so the keyboard drives the panes:
 | `/tasks` | Show the task board |
 | `/save` | Save this crew session to disk |
 | `/forget` | Clear the saved session for this folder |
+| `/audit` | Show the recent audit trail |
+| `/ship` | Run the configured deploy + health-check gate |
 | `/verify [id\|on\|off]` | Run quality gates now, or toggle auto-verify |
 | `/route <prompt>` | Force crew to auto-assign the best agent for a prompt |
 | `/stop [id]` | Abort the focused agent's turn (or one by id) |
@@ -159,6 +161,19 @@ follow-up question for the reviewer...
 
 Each agent is an independent SDK session, so they stream concurrently. Following up on a
 focused agent resumes its session, so it remembers context.
+
+### Ship & observe
+
+- **Audit trail** — every meaningful action (agent spawn/remove, message, tool call, permission
+  allow/deny, verify result, checkpoint, mode/budget change, ship) is appended to
+  `.crew/audit.jsonl` (gitignored) with a timestamp + agent id. `/audit` shows the recent tail —
+  an accountable record of what the AI did.
+- **`/ship`** — runs a final deploy gate you configure in `.crew/verify.json`, manually (never
+  automatic, since it's outward-facing):
+  ```json
+  { "deploy": "vercel deploy --prod", "health": "curl -fsS https://app.example.com/health" }
+  ```
+  It runs `deploy`, then (if set) `health`, reporting `✓ shipped` / `✗ …` and logging it.
 
 ### Sessions (resume across restarts)
 
@@ -308,6 +323,7 @@ src/
 │   ├── routeHeuristics.ts   # pure keyword classifier for prompt routing
 │   ├── guardrails.ts        # pure destructive-command denylist
 │   ├── sessionStore.ts      # save/restore crew + board (.crew/session.json)
+│   ├── auditLog.ts          # append-only audit trail (.crew/audit.jsonl)
 │   ├── mcpConfig.ts         # load MCP servers + settingSources (.crew/mcp.json)
 │   ├── toolResult.ts        # summarize a tool's output payload
 │   ├── gridLayout.ts        # pure grid geometry (dims, pane box, cells)
@@ -334,13 +350,11 @@ sessions and is never duplicated into the store.
 
 Toward building production software with only AI. **Done so far:** auto-routing, verify +
 auto-fix, **MCP servers**, a **safety mode** toggle, **git checkpoints** (commit-on-green +
-`/undo`), **guardrails + budgets**, a **planner + task board** (`/plan` → `/run`), and
-**session save/resume** across restarts. Next:
+`/undo`), **guardrails + budgets**, a **planner + task board** (`/plan` → `/run`),
+**session save/resume**, and **ship & observe** (`/audit` trail + `/ship` gate). Next:
 
 1. **Per-agent worktrees** — isolate concurrent builders so they can't collide in one tree
-   (then the task runner can go parallel instead of sequential).
-2. **Ship & observe** — a deploy/preview gate as a final verify step, plus run history + an
-   audit trail of every tool call.
+   (then the task runner can go parallel instead of sequential). The last invasive item.
 
 ## Development
 

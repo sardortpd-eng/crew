@@ -39,6 +39,8 @@ export type Command =
   | { readonly kind: "tasks" }
   | { readonly kind: "save" }
   | { readonly kind: "forget" }
+  | { readonly kind: "audit" }
+  | { readonly kind: "ship" }
   | { readonly kind: "help" }
   | { readonly kind: "quit" }
   | { readonly kind: "message"; readonly text: string }
@@ -118,6 +120,10 @@ export function parseCommand(raw: string): Command {
       return { kind: "save" };
     case "forget":
       return { kind: "forget" };
+    case "audit":
+      return { kind: "audit" };
+    case "ship":
+      return { kind: "ship" };
     case "budget": {
       const arg = rest[0]?.toLowerCase();
       if (!arg) return { kind: "budget" }; // show
@@ -219,6 +225,8 @@ export const HELP_TEXT = [
   "/tasks                   show the task board",
   "/save                    save this crew session to disk",
   "/forget                  clear the saved session for this folder",
+  "/audit                   show the recent audit trail",
+  "/ship                    run the configured deploy + health-check gate",
   "/help                    show this help",
   "/quit                    exit crew",
   "<text>                   message the focused agent",

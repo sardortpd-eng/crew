@@ -13,7 +13,10 @@ import {
 import { routePrompt } from "../engine/router.ts";
 import { VerifyController } from "../engine/verifyController.ts";
 import { HELP_TEXT, parseCommand } from "../lib/commands.ts";
+import { runGate } from "../engine/verifier.ts";
+import { appendAudit, readAudit } from "../lib/auditLog.ts";
 import { loadMcpConfig } from "../lib/mcpConfig.ts";
+import { loadShipConfig } from "../lib/projectGates.ts";
 import { createPermissionHandler } from "../lib/permissions.ts";
 import { handlePresetOp, loadStartupPresets } from "../lib/presetCommands.ts";
 import {
@@ -74,7 +77,14 @@ export function useCrew(cwd: string) {
                 agentId: agent.id,
                 toolName,
                 input,
-                resolve,
+                resolve: (allow) => {
+                  void appendAudit(cwd, {
+                    kind: "permission",
+                    agentId: agent.id,
+                    detail: `${allow ? "allow" : "deny"} ${toolName}`,
+                  });
+                  resolve(allow);
+                },
               });
             }),
         }),
@@ -82,6 +92,11 @@ export function useCrew(cwd: string) {
   }
 
   const orchestrator = orchestratorRef.current;
+
+  /** Appends an entry to the project's audit trail (best-effort). */
+  function logAudit(kind: string, agentId?: string, detail?: string): void {
+    void appendAudit(cwd, { kind, agentId, detail });
+  }
 
   if (checkpointRef.current === null) {
     checkpointRef.current = new CheckpointController({
@@ -97,6 +112,9 @@ export function useCrew(cwd: string) {
       send: (agentId, prompt) => orchestrator.send(agentId, prompt),
       onState: (agentId, state) => {
         useStore.getState().setVerify(agentId, state);
+        if (state.status === "passed" || state.status === "failed") {
+          logAudit("verify", agentId, `${state.status}${state.gate ? ` (${state.gate})` : ""}`);
+        }
         // Commit-on-green: a passing verify is a durable checkpoint.
         if (state.status === "passed") void commitOnGreen(agentId);
       },
@@ -171,7 +189,10 @@ export function useCrew(cwd: string) {
   async function commitOnGreen(agentId: string): Promise<void> {
     const label = lastUserMessage(agentId) ?? "turn";
     const result = await checkpoints.checkpoint(agentId, label);
-    if (result.ok) useStore.getState().setRouterStatus(result.message);
+    if (result.ok) {
+      useStore.getState().setRouterStatus(result.message);
+      logAudit("checkpoint", agentId, result.message);
+    }
   }
 
   function lastUserMessage(agentId: string): string | undefined {
@@ -189,7 +210,10 @@ export function useCrew(cwd: string) {
     session.on("status", (status) => store.setStatus(id, status));
     session.on("delta", (text) => store.appendDelta(id, text));
     session.on("text", (text) => store.appendDelta(id, text));
-    session.on("tool", (tool) => store.addToolBlock(id, tool));
+    session.on("tool", (tool) => {
+      store.addToolBlock(id, tool);
+      logAudit("tool", id, `${tool.name} ${JSON.stringify(tool.input)}`);
+    });
     session.on("result", (text) => {
       store.finalizeTurn(id, text);
       maybeVerify(agent);
@@ -202,6 +226,7 @@ export function useCrew(cwd: string) {
     session.on("error", (error) => {
       store.addError(id, error.message);
       store.finalizeTurn(id, "");
+      logAudit("error", id, error.message);
     });
   }
 
@@ -220,6 +245,7 @@ export function useCrew(cwd: string) {
     useStore.getState().addAgent(agent.id, preset.name);
     useStore.getState().focus(agent.id);
     autoView();
+    logAudit("spawn", agent.id, preset.name);
     return agent.id;
   }
 
@@ -247,6 +273,7 @@ export function useCrew(cwd: string) {
 
   function sendTo(id: string, prompt: string): void {
     useStore.getState().addUserMessage(id, prompt);
+    logAudit("message", id, prompt);
     void orchestrator.send(id, prompt).catch((error: unknown) => {
       useStore.getState().addError(id, error instanceof Error ? error.message : String(error));
     });
@@ -298,9 +325,39 @@ export function useCrew(cwd: string) {
     }
   }
 
+  /** Runs the configured deploy (+ health) command — the final ship gate. */
+  async function ship(): Promise<void> {
+    const { deploy, health } = loadShipConfig(cwd);
+    const setStatus = (msg: string) => useStore.getState().setRouterStatus(msg);
+    if (!deploy) {
+      setStatus("No deploy command — set `deploy` in .crew/verify.json");
+      return;
+    }
+    logAudit("ship", undefined, "start");
+    const signal = new AbortController().signal;
+
+    const dep = await runGate({ name: "deploy", command: deploy }, cwd, signal);
+    if (!dep.passed) {
+      logAudit("ship", undefined, `deploy failed (exit ${dep.exitCode})`);
+      setStatus(`✗ deploy failed (exit ${dep.exitCode})`);
+      return;
+    }
+    if (health) {
+      const h = await runGate({ name: "health", command: health }, cwd, signal);
+      if (!h.passed) {
+        logAudit("ship", undefined, "health check failed");
+        setStatus("✗ shipped but health check failed");
+        return;
+      }
+    }
+    logAudit("ship", undefined, "shipped");
+    setStatus("✓ shipped");
+  }
+
   /** Runs one turn and waits for any follow-on verify to settle (≤2 min). */
   async function sendAndSettle(id: string, prompt: string): Promise<void> {
     useStore.getState().addUserMessage(id, prompt);
+    logAudit("message", id, prompt);
     await orchestrator.send(id, prompt).catch(() => undefined);
     const start = Date.now();
     while (verifier.isVerifying(id) && Date.now() - start < 120_000) {
@@ -372,8 +429,15 @@ export function useCrew(cwd: string) {
         const store = useStore.getState();
         if (command.mode) store.setSafetyMode(command.mode);
         else store.cycleSafetyMode();
-        return { notice: `Safety mode: ${useStore.getState().safetyMode}` };
+        const mode = useStore.getState().safetyMode;
+        logAudit("mode", undefined, mode);
+        return { notice: `Safety mode: ${mode}` };
       }
+      case "audit":
+        return { notice: describeAudit(cwd) };
+      case "ship":
+        void ship();
+        return { notice: "Shipping…" };
       case "checkpoint": {
         const label = command.label ?? "manual checkpoint";
         void checkpoints
@@ -413,6 +477,7 @@ export function useCrew(cwd: string) {
           };
         }
         useStore.getState().setBudget(command.usd);
+        logAudit("budget", undefined, command.usd ? `$${command.usd}/turn` : "off");
         return {
           notice: command.usd ? `Per-turn budget: $${command.usd.toFixed(2)}` : "Budget cleared.",
         };
@@ -436,6 +501,7 @@ export function useCrew(cwd: string) {
         orchestrator.remove(id);
         useStore.getState().removeAgent(id);
         autoView();
+        logAudit("remove", id);
         return { notice: `Removed ${id}` };
       }
       case "focus": {
@@ -484,6 +550,18 @@ export function useCrew(cwd: string) {
 }
 
 const TASK_GLYPH: Record<string, string> = { todo: "☐", active: "▶", done: "✓", failed: "✗" };
+
+/** Renders `/audit`: the most recent trail entries + the log path. */
+function describeAudit(cwd: string): string {
+  const entries = readAudit(cwd, 15);
+  if (entries.length === 0) return "No audit entries yet.";
+  const lines = entries.map((e) => {
+    const time = e.ts.slice(11, 19); // HH:MM:SS
+    const who = e.agentId ? ` ${e.agentId}` : "";
+    return `  ${time} ${e.kind}${who}${e.detail ? ` · ${e.detail}` : ""}`;
+  });
+  return ["Audit trail (.crew/audit.jsonl):", ...lines].join("\n");
+}
 
 /** Renders `/tasks`: the board as a checklist. */
 function describeTasks(): string {

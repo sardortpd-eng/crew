@@ -102,6 +102,17 @@ function readVerifyConfig(cwd: string): Partial<GateConfig> | null {
   }
 }
 
+export type ShipConfig = { readonly deploy?: string; readonly health?: string };
+
+/** Reads the optional `deploy`/`health` commands from `.crew/verify.json`. */
+export function loadShipConfig(cwd: string): ShipConfig {
+  const raw = readVerifyConfig(cwd) as { deploy?: unknown; health?: unknown } | null;
+  return {
+    deploy: typeof raw?.deploy === "string" ? raw.deploy : undefined,
+    health: typeof raw?.health === "string" ? raw.health : undefined,
+  };
+}
+
 function clampAttempts(value: number | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_MAX_ATTEMPTS;
   return Math.min(Math.max(1, Math.floor(value)), 10);
