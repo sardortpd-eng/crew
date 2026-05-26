@@ -38,6 +38,13 @@ export type AgentStats = {
   readonly model: string;
 };
 
+/** One git checkpoint commit made by crew. */
+export type CheckpointInfo = {
+  readonly sha: string;
+  readonly agentId: string;
+  readonly label: string;
+};
+
 /** Verify + auto-fix loop state for one agent. */
 export type VerifyState = {
   readonly status: "idle" | "running" | "passed" | "failed";
@@ -88,6 +95,8 @@ type StoreState = {
   readonly routerStatus: string | null;
   readonly mcpStatus: readonly McpServerStatus[];
   readonly safetyMode: SafetyMode;
+  readonly checkpointBranch: string | null;
+  readonly checkpoints: readonly CheckpointInfo[];
 
   addAgent: (id: string, presetName: string) => void;
   removeAgent: (id: string) => void;
@@ -118,6 +127,7 @@ type StoreState = {
   setMcpStatus: (servers: readonly McpServerStatus[]) => void;
   setSafetyMode: (mode: SafetyMode) => void;
   cycleSafetyMode: () => void;
+  setCheckpoints: (branch: string | null, checkpoints: readonly CheckpointInfo[]) => void;
 };
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -135,6 +145,8 @@ export const useStore = create<StoreState>((set, get) => ({
   routerStatus: null,
   mcpStatus: [],
   safetyMode: "normal",
+  checkpointBranch: null,
+  checkpoints: [],
 
   addAgent: (id, presetName) =>
     set((s) => ({
@@ -271,6 +283,8 @@ export const useStore = create<StoreState>((set, get) => ({
       const i = SAFETY_MODES.indexOf(s.safetyMode);
       return { safetyMode: SAFETY_MODES[(i + 1) % SAFETY_MODES.length] ?? "normal" };
     }),
+
+  setCheckpoints: (branch, checkpoints) => set({ checkpointBranch: branch, checkpoints }),
 }));
 
 type Messages = Readonly<Record<string, readonly Message[]>>;

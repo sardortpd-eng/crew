@@ -17,6 +17,8 @@ const reset = () =>
     routerStatus: null,
     mcpStatus: [],
     safetyMode: "normal",
+    checkpointBranch: null,
+    checkpoints: [],
   });
 
 const s = () => useStore.getState();

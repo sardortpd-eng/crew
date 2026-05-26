@@ -30,6 +30,9 @@ export type Command =
   | { readonly kind: "route"; readonly prompt: string }
   | { readonly kind: "mcp" }
   | { readonly kind: "mode"; readonly mode?: SafetyMode }
+  | { readonly kind: "checkpoint"; readonly label?: string }
+  | { readonly kind: "undo" }
+  | { readonly kind: "diff" }
   | { readonly kind: "help" }
   | { readonly kind: "quit" }
   | { readonly kind: "message"; readonly text: string }
@@ -91,6 +94,13 @@ export function parseCommand(raw: string): Command {
       }
       return { kind: "mode", mode };
     }
+    case "checkpoint":
+    case "cp":
+      return args ? { kind: "checkpoint", label: args } : { kind: "checkpoint" };
+    case "undo":
+      return { kind: "undo" };
+    case "diff":
+      return { kind: "diff" };
     case "help":
     case "?":
       return { kind: "help" };
@@ -173,6 +183,9 @@ export const HELP_TEXT = [
   "/route <prompt>          force crew to auto-assign an agent for a prompt",
   "/mcp                     show configured MCP servers + connection status",
   "/mode [normal|plan|auto-edit|bypass]   set the safety mode (Shift+Tab cycles)",
+  "/checkpoint [label]      commit a git checkpoint now",
+  "/undo                    roll back the last checkpoint",
+  "/diff                    show the latest checkpoint's changed files",
   "/help                    show this help",
   "/quit                    exit crew",
   "<text>                   message the focused agent",

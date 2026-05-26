@@ -80,6 +80,9 @@ In grid view the prompt starts in **nav mode** so the keyboard drives the panes:
 | `/focus <id\|number>` | Switch the focused agent |
 | `/view [grid\|focus]` | Switch layout (also `Ctrl+G`) |
 | `/mode [normal\|plan\|auto-edit\|bypass]` | Set the safety mode (Shift+Tab cycles) |
+| `/checkpoint [label]` | Commit a git checkpoint of the working tree now |
+| `/undo` | Roll back the last checkpoint |
+| `/diff` | Show the latest checkpoint's changed files |
 | `/verify [id\|on\|off]` | Run quality gates now, or toggle auto-verify |
 | `/route <prompt>` | Force crew to auto-assign the best agent for a prompt |
 | `/stop [id]` | Abort the focused agent's turn (or one by id) |
@@ -185,6 +188,20 @@ shows in the header bar.
 
 `/mode` cycles; `/mode plan` · `/mode auto-edit` · `/mode bypass` · `/mode normal` set directly.
 
+### Checkpoints (git-backed)
+
+So autonomous edits are reversible, crew checkpoints your work with git:
+
+- On the **first** checkpoint, crew creates and switches to a `crew/<timestamp>` branch — your
+  working/main branch is never touched. Merge it yourself when you're happy.
+- **Commit-on-green:** after a builder agent's turn passes verify, crew commits the working tree
+  as a checkpoint (`crew(coder-1): <task>`). `/checkpoint [label]` snapshots manually anytime.
+- **`/undo`** hard-resets the tree to the previous checkpoint (then the branch base); **`/diff`**
+  shows the latest checkpoint's changed files. The header shows `⎇ crew/… · N ckpt`.
+- Needs a git repo in the working directory; outside one, checkpoints are silently off. Note: a
+  checkpoint commits *all* current changes in the tree (it's a snapshot), which is why it lives on
+  its own branch.
+
 ### Permissions
 
 Tools outside a preset's allowlist trigger an inline **allow / deny** prompt
@@ -229,6 +246,9 @@ src/
 │   ├── router.ts            # prompt → best preset (heuristic + LLM fallback)
 │   ├── verifier.ts          # runs one quality gate (injectable spawn)
 │   ├── verifyController.ts  # verify + auto-fix loop (serialized queue)
+│   ├── git.ts               # git ops via an injectable runner
+│   ├── checkpointController.ts # commit-on-green checkpoints + /undo
+│   ├── env.ts               # subscriptionEnv (strips ANTHROPIC_API_KEY)
 │   ├── types.ts             # shared engine types
 │   └── mockQuery.ts         # injectable mock generator for tests
 ├── state/store.ts           # Zustand: agents, messages, focus, view, stats, scroll, verify
@@ -265,14 +285,14 @@ sessions and is never duplicated into the store.
 ## Roadmap
 
 Toward building production software with only AI. **Done so far:** auto-routing, verify +
-auto-fix, and **MCP servers** (connect browser/DB/deploy/GitHub tools). Next, in order:
+auto-fix, **MCP servers**, a **safety mode** toggle, and **git checkpoints** (commit-on-green +
+`/undo`). Next, in order:
 
-1. **Git checkpoints** — branch-per-task, commit-on-green, diff review, `/undo` via SDK
-   file checkpointing (`enableFileCheckpointing` + `rewindFiles`).
-2. **Guardrails + budgets** — `PreToolUse` hooks blocking destructive commands/secrets;
+1. **Guardrails + budgets** — `PreToolUse` hooks blocking destructive commands/secrets;
    per-agent + global cost caps (`maxBudgetUsd`/`maxTurns`) with auto-stop.
-3. **Planner + task board** — a lead agent decomposes a goal and dispatches to workers
+2. **Planner + task board** — a lead agent decomposes a goal and dispatches to workers
    (`agents`/`delegate`); a shared persistent kanban.
+3. **Per-agent worktrees** — isolate concurrent builders so they can't collide in one tree.
 4. **Ship & observe** — a deploy/preview gate, session save/resume across restarts,
    run history + audit trail.
 

@@ -1,5 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { useRef } from "react";
+import { CheckpointController } from "../engine/checkpointController.ts";
 import { Orchestrator, type SpawnedAgent } from "../engine/orchestrator.ts";
 import { getPreset, isBuilderPreset, listPresets, presetNames } from "../engine/presets.ts";
 import { routePrompt } from "../engine/router.ts";
@@ -23,6 +24,7 @@ export type InputResult = {
 export function useCrew(cwd: string) {
   const orchestratorRef = useRef<Orchestrator | null>(null);
   const verifyRef = useRef<VerifyController | null>(null);
+  const checkpointRef = useRef<CheckpointController | null>(null);
   const autoVerifyRef = useRef<boolean>(true);
   const routingRef = useRef<boolean>(false);
   const mcpServersRef = useRef<readonly string[]>([]);
@@ -61,14 +63,42 @@ export function useCrew(cwd: string) {
 
   const orchestrator = orchestratorRef.current;
 
+  if (checkpointRef.current === null) {
+    checkpointRef.current = new CheckpointController({
+      cwd,
+      onChange: (branch, checkpoints) => useStore.getState().setCheckpoints(branch, checkpoints),
+    });
+  }
+  const checkpoints = checkpointRef.current;
+
   if (verifyRef.current === null) {
     verifyRef.current = new VerifyController({
       cwd,
       send: (agentId, prompt) => orchestrator.send(agentId, prompt),
-      onState: (agentId, state) => useStore.getState().setVerify(agentId, state),
+      onState: (agentId, state) => {
+        useStore.getState().setVerify(agentId, state);
+        // Commit-on-green: a passing verify is a durable checkpoint.
+        if (state.status === "passed") void commitOnGreen(agentId);
+      },
     });
   }
   const verifier = verifyRef.current;
+
+  /** Commits a checkpoint after a green turn, labeled with the agent's last task. */
+  async function commitOnGreen(agentId: string): Promise<void> {
+    const label = lastUserMessage(agentId) ?? "turn";
+    const result = await checkpoints.checkpoint(agentId, label);
+    if (result.ok) useStore.getState().setRouterStatus(result.message);
+  }
+
+  function lastUserMessage(agentId: string): string | undefined {
+    const list = useStore.getState().messages[agentId] ?? [];
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      const m = list[i];
+      if (m?.role === "user") return m.text;
+    }
+    return undefined;
+  }
 
   function wire(agent: SpawnedAgent): void {
     const { id, session } = agent;
@@ -200,6 +230,19 @@ export function useCrew(cwd: string) {
         else store.cycleSafetyMode();
         return { notice: `Safety mode: ${useStore.getState().safetyMode}` };
       }
+      case "checkpoint": {
+        const label = command.label ?? "manual checkpoint";
+        void checkpoints
+          .checkpoint(useStore.getState().focusedAgentId ?? "crew", label)
+          .then((r) => useStore.getState().setRouterStatus(r.message));
+        return {};
+      }
+      case "undo":
+        void checkpoints.undo().then((r) => useStore.getState().setRouterStatus(r.message));
+        return {};
+      case "diff":
+        void checkpoints.diff().then((text) => useStore.getState().setRouterStatus(text));
+        return {};
       case "spawn":
         return spawn(command.preset, command.task);
       case "broadcast":

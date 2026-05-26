@@ -11,6 +11,8 @@ export function HeaderBar() {
   const account = useStore((s) => s.account);
   const viewMode = useStore((s) => s.viewMode);
   const safetyMode = useStore((s) => s.safetyMode);
+  const branch = useStore((s) => s.checkpointBranch);
+  const checkpointCount = useStore((s) => s.checkpoints.length);
 
   const totals = aggregateTotals(stats);
 
@@ -30,12 +32,20 @@ export function HeaderBar() {
           {safetyLabel(safetyMode)}
         </Text>
       </Box>
-      {agents.length > 0 && (
-        <Text dimColor>
-          {agents.length} agent{agents.length === 1 ? "" : "s"} · {formatCost(totals.cost)} ·{" "}
-          {formatTokens(totals.tokens)} tok
-        </Text>
-      )}
+      <Box>
+        {branch && (
+          <Text dimColor>
+            ⎇ {branch} · {checkpointCount} ckpt
+            {agents.length > 0 ? " · " : ""}
+          </Text>
+        )}
+        {agents.length > 0 && (
+          <Text dimColor>
+            {agents.length} agent{agents.length === 1 ? "" : "s"} · {formatCost(totals.cost)} ·{" "}
+            {formatTokens(totals.tokens)} tok
+          </Text>
+        )}
+      </Box>
     </Box>
   );
 }
