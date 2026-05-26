@@ -26,6 +26,28 @@ Then run `crew` in any project directory. Or run it locally without linking:
 bun start
 ```
 
+## Quickstart (first run)
+
+```bash
+cd ~/code/my-project        # a git repo (run `git init` if it isn't one)
+crew                        # launch crew pointed at this folder
+```
+
+Then, in the input bar:
+
+```text
+/budget total 5             # cap total spend so nothing runs away
+/budget 1                   # cap per-turn spend too
+/lead build a CLI that converts CSV to JSON, with tests
+```
+
+The **lead agent** plans, hires specialists, delegates, verifies, and integrates — you watch the
+team work and every green step is auto-committed as a git checkpoint (`/undo` rolls back). Prefer
+hands-on instead? `/spawn coder add a /health endpoint`, or just type a request and crew auto-assigns
+an agent. `Shift+Tab` cycles the safety mode; `Esc` interrupts or clears; `/help` lists everything.
+
+> Launch crew **inside a git repo** — checkpoints, worktrees, and `/merge` rely on it.
+
 ## Usage
 
 crew runs full-screen with a header bar (subscription badge + live cost/token totals), a
