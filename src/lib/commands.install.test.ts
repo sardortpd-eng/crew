@@ -12,6 +12,16 @@ describe("/install + /uninstall parsing", () => {
     }
   });
 
+  test("/install update [name] parses (name optional)", () => {
+    const all = parseCommand("/install update");
+    if (all.kind === "install" && all.op.type === "update") expect(all.op.name).toBeUndefined();
+    else throw new Error("expected install/update");
+    const one = parseCommand("/install update greeter-pack");
+    if (one.kind === "install" && one.op.type === "update")
+      expect(one.op.name).toBe("greeter-pack");
+    else throw new Error("expected install/update name");
+  });
+
   test("/install list and /install ls are the list op", () => {
     for (const raw of ["/install list", "/install ls"]) {
       const cmd = parseCommand(raw);

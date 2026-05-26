@@ -23,7 +23,12 @@ import { appendAudit, readAudit } from "../lib/auditLog.ts";
 import { addMcpServer, loadMcpConfig, parseServerSpec } from "../lib/mcpConfig.ts";
 import type { McpServerConfig } from "../engine/types.ts";
 import { parseInstallArg } from "../lib/installSource.ts";
-import { installFromGit, listInstalled, removeInstalled } from "../lib/installStore.ts";
+import {
+  installFromGit,
+  listInstalled,
+  removeInstalled,
+  updateInstalled,
+} from "../lib/installStore.ts";
 import { loadShipConfig } from "../lib/projectGates.ts";
 import { isGreenfield } from "../lib/repoState.ts";
 import { aggregateTotals } from "../lib/headerStats.ts";
@@ -598,6 +603,32 @@ export function useCrew(cwd: string) {
       .setRouterStatus(`Installed ${parsed.name} (${components}) — live on the next message.`);
   }
 
+  /** Re-pulls one installed plugin, or all of them when no name is given. */
+  async function updatePlugins(name?: string): Promise<void> {
+    const setStatus = useStore.getState().setRouterStatus;
+    const targets = name ? [name] : listInstalled(cwd).map((p) => p.name);
+    if (targets.length === 0) {
+      setStatus("No plugins installed to update.");
+      return;
+    }
+    let ok = 0;
+    let failed = 0;
+    for (const target of targets) {
+      useStore.getState().setRouterStatus(`Updating ${target}…`);
+      const result = await updateInstalled(target, cwd);
+      if (result.ok) ok += 1;
+      else {
+        failed += 1;
+        logAudit("install", undefined, `update fail ${target}: ${result.error}`);
+      }
+    }
+    useStore.getState().setInstalledPlugins(listInstalled(cwd));
+    logAudit("install", undefined, `update ${ok} ok, ${failed} failed`);
+    useStore
+      .getState()
+      .setRouterStatus(`Updated ${ok} plugin(s)${failed ? `, ${failed} failed` : ""}.`);
+  }
+
   function handleInput(raw: string): InputResult {
     const command = parseCommand(raw);
     switch (command.kind) {
@@ -629,6 +660,10 @@ export function useCrew(cwd: string) {
       }
       case "install": {
         if (command.op.type === "list") return { notice: describeInstalled(cwd) };
+        if (command.op.type === "update") {
+          void updatePlugins(command.op.name);
+          return {};
+        }
         void installPlugin(command.op.arg);
         return {};
       }

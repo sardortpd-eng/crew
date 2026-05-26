@@ -40,7 +40,10 @@ export type Command =
     }
   | {
       readonly kind: "install";
-      readonly op: { readonly type: "add"; readonly arg: string } | { readonly type: "list" };
+      readonly op:
+        | { readonly type: "add"; readonly arg: string }
+        | { readonly type: "list" }
+        | { readonly type: "update"; readonly name?: string };
     }
   | { readonly kind: "uninstall"; readonly name: string }
   | { readonly kind: "mode"; readonly mode?: SafetyMode }
@@ -119,6 +122,9 @@ export function parseCommand(raw: string): Command {
     case "install": {
       const sub = rest[0]?.toLowerCase();
       if (sub === "list" || sub === "ls") return { kind: "install", op: { type: "list" } };
+      if (sub === "update" || sub === "upgrade") {
+        return { kind: "install", op: { type: "update", ...(rest[1] ? { name: rest[1] } : {}) } };
+      }
       if (!args) {
         return {
           kind: "error",

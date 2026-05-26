@@ -3,7 +3,13 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InstallSource } from "./installSource.ts";
-import { type GitRunner, installFromGit, listInstalled, removeInstalled } from "./installStore.ts";
+import {
+  type GitRunner,
+  installFromGit,
+  listInstalled,
+  removeInstalled,
+  updateInstalled,
+} from "./installStore.ts";
 
 let work: string;
 let remote: string;
@@ -75,6 +81,31 @@ describe("installFromGit (real git)", () => {
   test("uninstalling something not installed is a clean error", () => {
     const removed = removeInstalled("nope", work);
     expect(removed.ok).toBe(false);
+  });
+
+  test("update re-pulls upstream changes", async () => {
+    const first = await installFromGit(source(), { cwd: work });
+    expect(first.ok).toBe(true);
+    if (first.ok) expect(first.plugin.components).toContain("1 command");
+
+    // Add a second command upstream and commit it.
+    writeFileSync(join(remote, "commands", "bye.md"), "# /bye\nSay bye.");
+    await Bun.spawn(
+      ["sh", "-c", "git add -A && git -c user.email=t@t.t -c user.name=t commit -q -m more"],
+      {
+        cwd: remote,
+      },
+    ).exited;
+
+    const updated = await updateInstalled("greeter-pack", work);
+    expect(updated.ok).toBe(true);
+    if (updated.ok) expect(updated.plugin.components).toContain("2 commands");
+    expect(listInstalled(work).map((p) => p.name)).toEqual(["greeter-pack"]);
+  });
+
+  test("updating something not installed is a clean error", async () => {
+    const r = await updateInstalled("nope", work);
+    expect(r.ok).toBe(false);
   });
 });
 

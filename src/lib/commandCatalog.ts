@@ -55,8 +55,8 @@ export const COMMAND_CATALOG: readonly CommandSpec[] = [
   },
   {
     name: "install",
-    args: "<repo> [--global]",
-    summary: "Install skills/commands/MCP from a git repo (or: list)",
+    args: "<repo> [--global] | list | update [name]",
+    summary: "Install / list / re-pull skills/commands/MCP from a git repo",
   },
   { name: "uninstall", args: "<name>", summary: "Remove an installed plugin" },
   {

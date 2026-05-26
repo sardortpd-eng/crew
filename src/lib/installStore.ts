@@ -148,6 +148,38 @@ export function removeInstalled(
 }
 
 /**
+ * Re-clones an installed plugin from its recorded source (url/ref/scope),
+ * picking up upstream changes. Wipes the old checkout + registry entry, then
+ * reuses {@link installFromGit}. Returns the fresh {@link InstallResult}.
+ */
+export async function updateInstalled(
+  name: string,
+  cwd: string,
+  opts: { git?: GitRunner } = {},
+): Promise<InstallResult> {
+  for (const scope of ["project", "global"] as const) {
+    const entries = readRegistry(scope, cwd);
+    const match = entries.find((p) => p.name === name);
+    if (!match) continue;
+    // Clear the old dir + entry so installFromGit's "already installed" guard passes.
+    safeRemove(match.path);
+    writeRegistry(
+      scope,
+      cwd,
+      entries.filter((p) => p.name !== name),
+    );
+    const source: InstallSource = {
+      url: match.url,
+      name: match.name,
+      scope,
+      ...(match.ref ? { ref: match.ref } : {}),
+    };
+    return installFromGit(source, { cwd, git: opts.git });
+  }
+  return { ok: false, error: `"${name}" is not installed.` };
+}
+
+/**
  * Every installed plugin across both scopes, pruning entries whose directory
  * has gone missing. Project entries win on name conflicts.
  */
