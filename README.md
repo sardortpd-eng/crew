@@ -87,6 +87,8 @@ In grid view the prompt starts in **nav mode** so the keyboard drives the panes:
 | `/plan <goal>` | Break a goal into an assigned task board |
 | `/run` | Run the task board sequentially |
 | `/tasks` | Show the task board |
+| `/save` | Save this crew session to disk |
+| `/forget` | Clear the saved session for this folder |
 | `/verify [id\|on\|off]` | Run quality gates now, or toggle auto-verify |
 | `/route <prompt>` | Force crew to auto-assign the best agent for a prompt |
 | `/stop [id]` | Abort the focused agent's turn (or one by id) |
@@ -157,6 +159,17 @@ follow-up question for the reviewer...
 
 Each agent is an independent SDK session, so they stream concurrently. Following up on a
 focused agent resumes its session, so it remembers context.
+
+### Sessions (resume across restarts)
+
+crew remembers each project. When you launch it in a folder where you've worked before, it
+**restores the crew** — every agent (resuming its prior conversation via `query({resume})`) and
+the task board — so you can pick up a build across multiple sittings.
+
+- Autosaves to `.crew/session.json` (gitignored) as you work; `/save` forces a save now.
+- On launch you'll see `Restored N agent(s) + M task(s)` — message an agent to continue where it
+  left off (its context is resumed, though the on-screen transcript starts fresh).
+- `/forget` clears the saved session for the current folder.
 
 ### Plan → task board → run
 
@@ -294,6 +307,7 @@ src/
 │   ├── verifyDecision.ts    # pure: next action (pass/fix/giveup) + fix prompt
 │   ├── routeHeuristics.ts   # pure keyword classifier for prompt routing
 │   ├── guardrails.ts        # pure destructive-command denylist
+│   ├── sessionStore.ts      # save/restore crew + board (.crew/session.json)
 │   ├── mcpConfig.ts         # load MCP servers + settingSources (.crew/mcp.json)
 │   ├── toolResult.ts        # summarize a tool's output payload
 │   ├── gridLayout.ts        # pure grid geometry (dims, pane box, cells)
@@ -320,13 +334,13 @@ sessions and is never duplicated into the store.
 
 Toward building production software with only AI. **Done so far:** auto-routing, verify +
 auto-fix, **MCP servers**, a **safety mode** toggle, **git checkpoints** (commit-on-green +
-`/undo`), **guardrails + budgets**, and a **planner + task board** (`/plan` → `/run`). Next:
+`/undo`), **guardrails + budgets**, a **planner + task board** (`/plan` → `/run`), and
+**session save/resume** across restarts. Next:
 
 1. **Per-agent worktrees** — isolate concurrent builders so they can't collide in one tree
    (then the task runner can go parallel instead of sequential).
-2. **Ship & observe** — a deploy/preview gate, session save/resume across restarts,
-   run history + audit trail.
-3. **Persistent task board** — save the board (and sessions) to disk so a plan survives restarts.
+2. **Ship & observe** — a deploy/preview gate as a final verify step, plus run history + an
+   audit trail of every tool call.
 
 ## Development
 

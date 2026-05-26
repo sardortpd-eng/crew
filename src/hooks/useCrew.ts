@@ -16,6 +16,12 @@ import { HELP_TEXT, parseCommand } from "../lib/commands.ts";
 import { loadMcpConfig } from "../lib/mcpConfig.ts";
 import { createPermissionHandler } from "../lib/permissions.ts";
 import { handlePresetOp, loadStartupPresets } from "../lib/presetCommands.ts";
+import {
+  forgetSession,
+  loadSession,
+  saveSession,
+  type SessionSnapshot,
+} from "../lib/sessionStore.ts";
 import { useStore } from "../state/store.ts";
 
 /** Result of handling one input line. */
@@ -36,6 +42,7 @@ export function useCrew(cwd: string) {
   const routingRef = useRef<boolean>(false);
   const planRunningRef = useRef<boolean>(false);
   const planAbortRef = useRef<boolean>(false);
+  const restoredRef = useRef<boolean>(false);
   const mcpServersRef = useRef<readonly string[]>([]);
   const startupNoticeRef = useRef<string | undefined>(undefined);
 
@@ -97,6 +104,69 @@ export function useCrew(cwd: string) {
   }
   const verifier = verifyRef.current;
 
+  // Restore a saved crew + board for this folder, then keep autosaving (once).
+  if (!restoredRef.current) {
+    restoredRef.current = true;
+    startupNoticeRef.current = joinNotices(startupNoticeRef.current, restoreSession());
+    setupAutosave();
+  }
+
+  function snapshotForSave(): SessionSnapshot {
+    const st = useStore.getState();
+    return {
+      agents: st.agents.map((a) => ({
+        id: a.id,
+        presetName: a.presetName,
+        ...(a.sessionId ? { sessionId: a.sessionId } : {}),
+      })),
+      tasks: [...st.tasks],
+      focusedAgentId: st.focusedAgentId,
+      safetyMode: st.safetyMode,
+    };
+  }
+
+  /** Recreates the agents + board from the last saved session for this folder. */
+  function restoreSession(): string | undefined {
+    const snap = loadSession(cwd);
+    if (!snap) return undefined;
+
+    let restored = 0;
+    for (const a of snap.agents) {
+      const preset = getPreset(a.presetName);
+      if (!preset) continue;
+      const agent = orchestrator.restore(a.id, preset, a.sessionId);
+      wire(agent);
+      useStore.getState().addAgent(a.id, preset.name);
+      if (a.sessionId) useStore.getState().setSessionId(a.id, a.sessionId);
+      restored += 1;
+    }
+    if (snap.tasks.length > 0) useStore.getState().setTasks(snap.tasks);
+    if (snap.focusedAgentId) useStore.getState().focus(snap.focusedAgentId);
+    if (snap.safetyMode) useStore.getState().setSafetyMode(snap.safetyMode);
+    autoView();
+
+    if (restored === 0 && snap.tasks.length === 0) return undefined;
+    const taskNote = snap.tasks.length > 0 ? ` + ${snap.tasks.length} task(s)` : "";
+    return `Restored ${restored} agent(s)${taskNote} — message one to resume its context.`;
+  }
+
+  /** Debounced autosave of the session whenever the persisted slice changes. */
+  function setupAutosave(): void {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastJson = "";
+    useStore.subscribe(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const snap = snapshotForSave();
+        if (snap.agents.length === 0 && snap.tasks.length === 0) return;
+        const json = JSON.stringify(snap);
+        if (json === lastJson) return;
+        lastJson = json;
+        saveSession(cwd, snap);
+      }, 800);
+    });
+  }
+
   /** Commits a checkpoint after a green turn, labeled with the agent's last task. */
   async function commitOnGreen(agentId: string): Promise<void> {
     const label = lastUserMessage(agentId) ?? "turn";
@@ -126,6 +196,7 @@ export function useCrew(cwd: string) {
     });
     session.on("usage", (snapshot) => store.addUsage(id, snapshot));
     session.on("toolResult", (r) => store.setToolResult(r.toolUseId, r.summary));
+    session.on("session", (sid) => store.setSessionId(id, sid));
     session.on("account", (info) => store.setAccount(info));
     session.on("mcp", (servers) => store.setMcpStatus(servers));
     session.on("error", (error) => {
@@ -328,6 +399,12 @@ export function useCrew(cwd: string) {
       }
       case "tasks":
         return { notice: describeTasks() };
+      case "save":
+        saveSession(cwd, snapshotForSave());
+        return { notice: "Session saved." };
+      case "forget":
+        forgetSession(cwd);
+        return { notice: "Saved session cleared for this folder." };
       case "budget": {
         if (command.usd === undefined) {
           const cur = useStore.getState().perTurnBudgetUsd;

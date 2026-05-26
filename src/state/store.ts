@@ -77,6 +77,8 @@ export type AgentView = {
   readonly id: string;
   readonly presetName: string;
   readonly status: AgentStatus;
+  /** SDK session id, captured for resume + persistence. */
+  readonly sessionId?: string;
 };
 
 /** A tool-use approval awaiting the user's allow/deny decision. */
@@ -112,6 +114,7 @@ type StoreState = {
   addAgent: (id: string, presetName: string) => void;
   removeAgent: (id: string) => void;
   setStatus: (id: string, status: AgentStatus) => void;
+  setSessionId: (id: string, sessionId: string) => void;
   focus: (id: string | null) => void;
 
   addUserMessage: (id: string, text: string) => void;
@@ -142,6 +145,7 @@ type StoreState = {
   setBudget: (usd: number | null) => void;
   addTasks: (tasks: ReadonlyArray<{ title: string; preset: string }>) => void;
   setTaskStatus: (id: string, status: Task["status"]) => void;
+  setTasks: (tasks: readonly Task[]) => void;
   clearTasks: () => void;
 };
 
@@ -189,6 +193,11 @@ export const useStore = create<StoreState>((set, get) => ({
   setStatus: (id, status) =>
     set((s) => ({
       agents: s.agents.map((a) => (a.id === id ? { ...a, status } : a)),
+    })),
+
+  setSessionId: (id, sessionId) =>
+    set((s) => ({
+      agents: s.agents.map((a) => (a.id === id ? { ...a, sessionId } : a)),
     })),
 
   focus: (id) => set({ focusedAgentId: id }),
@@ -319,6 +328,8 @@ export const useStore = create<StoreState>((set, get) => ({
 
   setTaskStatus: (id, status) =>
     set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, status } : t)) })),
+
+  setTasks: (tasks) => set({ tasks: [...tasks] }),
 
   clearTasks: () => set({ tasks: [] }),
 }));

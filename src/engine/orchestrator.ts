@@ -53,6 +53,20 @@ export class Orchestrator {
     const session = new AgentSession(id, this.config.queryFn);
     const agent: SpawnedAgent = { id, preset, session };
     this.agents.set(id, agent);
+    this.counter = Math.max(this.counter, idCounter(id, preset.name));
+    return agent;
+  }
+
+  /**
+   * Recreates an agent from a saved session: reuses its id and pre-loads the
+   * SDK `sessionId` so the next turn resumes the prior conversation.
+   */
+  restore(id: string, preset: Preset, sessionId?: string): SpawnedAgent {
+    const session = new AgentSession(id, this.config.queryFn);
+    if (sessionId) session.sessionId = sessionId;
+    const agent: SpawnedAgent = { id, preset, session };
+    this.agents.set(id, agent);
+    this.counter = Math.max(this.counter, idCounter(id, preset.name));
     return agent;
   }
 
@@ -132,4 +146,10 @@ export class Orchestrator {
     this.counter += 1;
     return `${presetName}-${this.counter}`;
   }
+}
+
+/** Extracts the numeric suffix from an id like `coder-3` (0 if absent). */
+function idCounter(id: string, presetName: string): number {
+  const n = Number.parseInt(id.slice(presetName.length + 1), 10);
+  return Number.isFinite(n) ? n : 0;
 }

@@ -237,6 +237,18 @@ describe("store", () => {
     expect(s().tasks).toHaveLength(0);
   });
 
+  test("setSessionId attaches a session id to the agent", () => {
+    s().addAgent("coder-1", "coder");
+    s().setSessionId("coder-1", "sess-xyz");
+    expect(s().agents[0]?.sessionId).toBe("sess-xyz");
+  });
+
+  test("setTasks replaces the board wholesale", () => {
+    s().addTasks([{ title: "old", preset: "coder" }]);
+    s().setTasks([{ id: "t9", title: "restored", preset: "tester", status: "done" }]);
+    expect(s().tasks).toEqual([{ id: "t9", title: "restored", preset: "tester", status: "done" }]);
+  });
+
   test("setSafetyMode sets directly", () => {
     s().setSafetyMode("bypassPermissions");
     expect(s().safetyMode).toBe("bypassPermissions");

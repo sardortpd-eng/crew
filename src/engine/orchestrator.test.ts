@@ -136,4 +136,17 @@ describe("Orchestrator", () => {
     expect(orch.get(agent.id)).toBeUndefined();
     expect(orch.list()).toHaveLength(0);
   });
+
+  test("restore reuses the id, presets sessionId, and resumes; later spawns don't collide", async () => {
+    const query = makeMockQuery([resultSuccess("ok", "sess-new")]);
+    const orch = new Orchestrator({ queryFn: query });
+    const agent = orch.restore("coder-7", coder(), "sess-saved");
+
+    expect(agent.id).toBe("coder-7");
+    expect(agent.session.sessionId).toBe("sess-saved");
+
+    await orch.send("coder-7", "continue");
+    expect(query.calls[0]?.options?.resume).toBe("sess-saved");
+    expect(orch.spawn(coder()).id).toBe("coder-8");
+  });
 });
