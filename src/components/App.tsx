@@ -62,9 +62,10 @@ export function App({ cwd }: { cwd: string }) {
     }
     if (hasPending) return;
 
+    // When the input is live, InputBar owns Esc (clear the line, then onEscape).
+    // Only handle Esc here for the inactive-input case (grid nav).
     if (key.escape) {
-      if (grid && typing) setTyping(false);
-      else if (busy) crew.interrupt();
+      if (!inputActive && busy) crew.interrupt();
       return;
     }
     // Enter typing mode from grid nav.
@@ -72,6 +73,12 @@ export function App({ cwd }: { cwd: string }) {
       setTyping(true);
     }
   });
+
+  /** Esc on an empty input line: leave grid typing, else interrupt a busy agent. */
+  function handleEscape(): void {
+    if (grid && typing) setTyping(false);
+    else if (busy) crew.interrupt();
+  }
 
   function handleSubmit(raw: string): void {
     const result = crew.handleInput(raw);
@@ -117,7 +124,7 @@ export function App({ cwd }: { cwd: string }) {
       )}
 
       <Box marginTop={1}>
-        <InputBar onSubmit={handleSubmit} active={inputActive} />
+        <InputBar onSubmit={handleSubmit} onEscape={handleEscape} active={inputActive} />
       </Box>
 
       <Hint grid={grid} hasAgents={agents.length > 0} hasPending={hasPending} />

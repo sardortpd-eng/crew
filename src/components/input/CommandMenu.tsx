@@ -50,7 +50,7 @@ export function CommandMenu({
       })}
       <Text dimColor>
         {matches.length > MAX_ROWS ? `↑↓ ${matches.length} matches · ` : "↑↓ select · "}
-        Tab complete · Enter run
+        Tab complete · Enter run · Esc clear
       </Text>
     </Box>
   );

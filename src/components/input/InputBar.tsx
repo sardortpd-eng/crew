@@ -18,9 +18,12 @@ import { CommandMenu } from "./CommandMenu.tsx";
  */
 export function InputBar({
   onSubmit,
+  onEscape,
   active = true,
 }: {
   onSubmit: (raw: string) => void;
+  /** Called when Esc is pressed on an already-empty line (e.g. to interrupt). */
+  onEscape?: () => void;
   active?: boolean;
 }) {
   const [resetKey, setResetKey] = useState(0);
@@ -54,9 +57,17 @@ export function InputBar({
     { isActive: Boolean(pending) },
   );
 
-  // Menu navigation. TextInput ignores up/down/tab, so these are ours to use.
+  // Esc clears the whole line (and closes the menu) in one press; on an empty
+  // line it defers to the caller (interrupt / leave typing mode). Menu nav uses
+  // up/down/tab, which TextInput ignores — so there's no conflict.
   useInput(
     (_input, key) => {
+      if (key.escape) {
+        if (value.length > 0) replaceValue("");
+        else onEscape?.();
+        return;
+      }
+      if (!menuOpen || matches.length === 0) return;
       if (key.downArrow) setSelected((i) => Math.min(matches.length - 1, i + 1));
       else if (key.upArrow) setSelected((i) => Math.max(0, i - 1));
       else if (key.tab) {
@@ -64,7 +75,7 @@ export function InputBar({
         if (spec) replaceValue(completeWith(spec));
       }
     },
-    { isActive: menuOpen && matches.length > 0 },
+    { isActive: active && !pending },
   );
 
   /** Replaces the field contents by remounting TextInput with a new default. */
