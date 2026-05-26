@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parsePlan, planGoal } from "./planner.ts";
+import { dropLeadingScouts, parsePlan, planGoal } from "./planner.ts";
 import { listPresets } from "./presets.ts";
 import type { Query } from "@anthropic-ai/claude-agent-sdk";
 import type { SDKMessage } from "./types.ts";
@@ -73,5 +73,31 @@ describe("planGoal", () => {
       },
     });
     expect(tasks).toEqual([{ preset: "coder", title: "x" }]);
+  });
+
+  test("greenfield drops a leading exploration task", async () => {
+    const plan = "explorer: explore the codebase\ncoder: build it\ntester: test it";
+    const normal = await planGoal("g", PRESETS, { queryFn: fakeQuery(plan) });
+    expect(normal[0]?.preset).toBe("explorer"); // kept by default
+    const green = await planGoal("g", PRESETS, { queryFn: fakeQuery(plan), greenfield: true });
+    expect(green.map((t) => t.preset)).toEqual(["coder", "tester"]); // scout dropped
+  });
+});
+
+describe("dropLeadingScouts", () => {
+  test("strips leading explorer/planner/architect, keeps the rest", () => {
+    expect(
+      dropLeadingScouts([
+        { preset: "explorer", title: "look" },
+        { preset: "planner", title: "plan" },
+        { preset: "coder", title: "build" },
+        { preset: "explorer", title: "later" },
+      ]).map((t) => t.preset),
+    ).toEqual(["coder", "explorer"]); // only leading scouts removed
+  });
+
+  test("never returns empty (keeps all if every task is a scout)", () => {
+    const all = [{ preset: "explorer", title: "a" }];
+    expect(dropLeadingScouts(all)).toEqual(all);
   });
 });

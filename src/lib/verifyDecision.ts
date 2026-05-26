@@ -1,5 +1,17 @@
 import type { Gate } from "./projectGates.ts";
 
+/**
+ * Final status of a task on the board after its turn (+ verify) settles.
+ * A task is failed if the agent errored OR its verify ended `failed` — so the
+ * runner can pause instead of building later tasks on a broken step.
+ */
+export function taskOutcome(
+  agentErrored: boolean,
+  verifyStatus?: "idle" | "running" | "passed" | "failed",
+): "done" | "failed" {
+  return agentErrored || verifyStatus === "failed" ? "failed" : "done";
+}
+
 /** Outcome of running one gate command. */
 export type GateResult = {
   readonly name: string;

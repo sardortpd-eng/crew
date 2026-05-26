@@ -22,7 +22,7 @@ export type GateConfig = {
   readonly gates: readonly Gate[] | null;
 };
 
-export const DEFAULT_MAX_ATTEMPTS = 3;
+export const DEFAULT_MAX_ATTEMPTS = 5;
 
 /**
  * Detects quality gates from a repo snapshot, ordered cheap→expensive so the

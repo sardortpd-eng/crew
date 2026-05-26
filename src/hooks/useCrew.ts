@@ -1,4 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { readdirSync } from "node:fs";
 import { useRef } from "react";
 import { CheckpointController } from "../engine/checkpointController.ts";
 import { Orchestrator, type SpawnedAgent } from "../engine/orchestrator.ts";
@@ -12,12 +13,15 @@ import {
   presetNames,
 } from "../engine/presets.ts";
 import { routePrompt } from "../engine/router.ts";
+import { taskOutcome } from "../lib/verifyDecision.ts";
 import { VerifyController } from "../engine/verifyController.ts";
 import { HELP_TEXT, parseCommand } from "../lib/commands.ts";
 import { runGate } from "../engine/verifier.ts";
 import { appendAudit, readAudit } from "../lib/auditLog.ts";
 import { loadMcpConfig } from "../lib/mcpConfig.ts";
 import { loadShipConfig } from "../lib/projectGates.ts";
+import { isGreenfield } from "../lib/repoState.ts";
+import { aggregateTotals } from "../lib/headerStats.ts";
 import { createPermissionHandler } from "../lib/permissions.ts";
 import { handlePresetOp, loadStartupPresets } from "../lib/presetCommands.ts";
 import {
@@ -316,7 +320,13 @@ export function useCrew(cwd: string) {
   /** Decomposes a goal into an assigned task board (does not run it). */
   async function plan(goal: string): Promise<void> {
     useStore.getState().setRouterStatus("↳ planning…");
-    const tasks = await planGoal(goal, listPresets(), { queryFn: query });
+    let greenfield = false;
+    try {
+      greenfield = isGreenfield(readdirSync(cwd));
+    } catch {
+      greenfield = false;
+    }
+    const tasks = await planGoal(goal, listPresets(), { queryFn: query, greenfield });
     useStore.getState().addTasks(tasks);
     useStore.getState().setRouterStatus(`↳ planned ${tasks.length} task(s) · /run to execute`);
   }
@@ -329,6 +339,14 @@ export function useCrew(cwd: string) {
     try {
       for (;;) {
         if (planAbortRef.current) break;
+        const cap = useStore.getState().sessionBudgetUsd;
+        if (cap !== null && aggregateTotals(useStore.getState().stats).cost >= cap) {
+          useStore
+            .getState()
+            .setRouterStatus(`↳ session budget $${cap.toFixed(2)} reached — paused`);
+          logAudit("budget", undefined, `session cap $${cap} reached — paused run`);
+          break;
+        }
         const task = useStore.getState().tasks.find((t) => t.status === "todo");
         if (!task) break;
 
@@ -340,14 +358,32 @@ export function useCrew(cwd: string) {
         useStore.getState().setTaskStatus(task.id, "active");
         const id = ensureAgent(preset);
         await sendAndSettle(id, task.title);
-        const status = useStore.getState().agents.find((a) => a.id === id)?.status;
-        useStore.getState().setTaskStatus(task.id, status === "error" ? "failed" : "done");
+
+        const st = useStore.getState();
+        const outcome = taskOutcome(
+          st.agents.find((a) => a.id === id)?.status === "error",
+          st.verify[id]?.status,
+        );
+        st.setTaskStatus(task.id, outcome);
+        if (outcome === "failed") {
+          // Don't cascade broken state — pause so the user can fix, then /run resumes.
+          logAudit("plan", id, `paused: ${task.title}`);
+          break;
+        }
       }
     } finally {
       planRunningRef.current = false;
-      const done = useStore.getState().tasks.filter((t) => t.status === "done").length;
-      const total = useStore.getState().tasks.length;
-      useStore.getState().setRouterStatus(`↳ run complete · ${done}/${total} done`);
+      const tasks = useStore.getState().tasks;
+      const done = tasks.filter((t) => t.status === "done").length;
+      const failed = tasks.find((t) => t.status === "failed");
+      const remaining = tasks.some((t) => t.status === "todo");
+      useStore
+        .getState()
+        .setRouterStatus(
+          failed && remaining
+            ? `↳ paused: a task failed verify (${done}/${tasks.length} done) — fix & /run to resume`
+            : `↳ run complete · ${done}/${tasks.length} done`,
+        );
     }
   }
 
@@ -522,17 +558,20 @@ export function useCrew(cwd: string) {
         forgetSession(cwd);
         return { notice: "Saved session cleared for this folder." };
       case "budget": {
+        const session = command.scope === "session";
+        const store = useStore.getState();
         if (command.usd === undefined) {
-          const cur = useStore.getState().perTurnBudgetUsd;
+          const cur = session ? store.sessionBudgetUsd : store.perTurnBudgetUsd;
+          const label = session ? "Session budget" : "Per-turn budget";
           return {
-            notice: cur ? `Per-turn budget: $${cur.toFixed(2)}` : "No per-turn budget set.",
+            notice: cur ? `${label}: $${cur.toFixed(2)}` : `No ${label.toLowerCase()} set.`,
           };
         }
-        useStore.getState().setBudget(command.usd);
-        logAudit("budget", undefined, command.usd ? `$${command.usd}/turn` : "off");
-        return {
-          notice: command.usd ? `Per-turn budget: $${command.usd.toFixed(2)}` : "Budget cleared.",
-        };
+        if (session) store.setSessionBudget(command.usd);
+        else store.setBudget(command.usd);
+        logAudit("budget", undefined, `${session ? "session" : "turn"} ${command.usd ?? "off"}`);
+        const word = session ? "Session budget" : "Per-turn budget";
+        return { notice: command.usd ? `${word}: $${command.usd.toFixed(2)}` : `${word} cleared.` };
       }
       case "spawn":
         return spawn(command.preset, command.task);

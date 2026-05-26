@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { getPreset, isBuilderPreset } from "../engine/presets.ts";
-import { buildFixPrompt, type GateResult, nextAction } from "./verifyDecision.ts";
+import { buildFixPrompt, type GateResult, nextAction, taskOutcome } from "./verifyDecision.ts";
 
 const ok = (name: string): GateResult => ({ name, passed: true, exitCode: 0, output: "" });
 const fail = (name: string): GateResult => ({
@@ -45,6 +45,15 @@ describe("buildFixPrompt", () => {
     const prompt = buildFixPrompt({ name: "build", passed: false, exitCode: 2, output: long });
     expect(prompt).toContain("TAIL");
     expect(prompt.length).toBeLessThan(2300);
+  });
+});
+
+describe("taskOutcome", () => {
+  test("failed when the agent errored or verify failed; else done", () => {
+    expect(taskOutcome(true, "passed")).toBe("failed");
+    expect(taskOutcome(false, "failed")).toBe("failed");
+    expect(taskOutcome(false, "passed")).toBe("done");
+    expect(taskOutcome(false, undefined)).toBe("done"); // no gates → not a failure
   });
 });
 

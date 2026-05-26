@@ -11,7 +11,19 @@ export type PlannedTask = { readonly title: string; readonly preset: string };
 export type PlannerDeps = {
   readonly queryFn: QueryFn;
   readonly timeoutMs?: number;
+  /** True for a new/empty project — skip an exploration task, start building. */
+  readonly greenfield?: boolean;
 };
+
+/** Read-only "scout" presets that are pointless to run first on an empty repo. */
+const SCOUT_PRESETS = new Set(["explorer", "planner", "architect"]);
+
+/** Drops leading scout tasks (a greenfield backstop if the model adds one). */
+export function dropLeadingScouts(tasks: readonly PlannedTask[]): PlannedTask[] {
+  let i = 0;
+  while (i < tasks.length && SCOUT_PRESETS.has(tasks[i]!.preset)) i += 1;
+  return i < tasks.length ? tasks.slice(i) : [...tasks];
+}
 
 /**
  * Decomposes a high-level goal into an ordered list of concrete tasks, each
@@ -25,10 +37,13 @@ export async function planGoal(
 ): Promise<PlannedTask[]> {
   const names = presets.map((p) => p.preset.name);
   const catalogue = presets.map((p) => `- ${p.preset.name}: ${p.preset.description}`).join("\n");
+  const greenfieldNote = deps.greenfield
+    ? " This is a new/empty project — do NOT include a codebase-exploration task; start building."
+    : "";
   const systemPrompt =
     "You are a planner for a multi-agent coding tool. Break the user's goal into a short, " +
     "ordered list of concrete, independently-runnable tasks (3–8). Assign each to the best " +
-    "agent preset. Reply with ONE task per line as `preset: task description` — nothing else.\n\n" +
+    `agent preset.${greenfieldNote} Reply with ONE task per line as \`preset: task description\` — nothing else.\n\n` +
     `Available presets:\n${catalogue}`;
 
   const controller = new AbortController();
@@ -47,7 +62,8 @@ export async function planGoal(
     });
     const text = await withTimeout(collectText(iterator), deps.timeoutMs ?? TIMEOUT_MS);
     if (text === null) controller.abort();
-    const tasks = text ? parsePlan(text, names) : [];
+    let tasks = text ? parsePlan(text, names) : [];
+    if (deps.greenfield) tasks = dropLeadingScouts(tasks);
     return tasks.length > 0 ? tasks : [{ title: goal.trim(), preset: DEFAULT_PRESET }];
   } catch {
     return [{ title: goal.trim(), preset: DEFAULT_PRESET }];

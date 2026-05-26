@@ -52,7 +52,7 @@ describe("loadGates", () => {
     write("bun.lock", "");
     const cfg = loadGates(dir);
     expect(cfg.autoVerify).toBe(true);
-    expect(cfg.maxAttempts).toBe(3);
+    expect(cfg.maxAttempts).toBe(5);
     expect(cfg.gates?.map((g) => g.name)).toEqual(["test", "build"]);
   });
 

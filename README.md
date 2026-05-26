@@ -84,6 +84,7 @@ In grid view the prompt starts in **nav mode** so the keyboard drives the panes:
 | `/undo` | Roll back the last checkpoint |
 | `/diff` | Show the latest checkpoint's changed files |
 | `/budget [usd\|off]` | Cap per-turn spend (e.g. `/budget 0.50`) |
+| `/budget total <usd\|off>` | Cap total session spend (pauses `/run` when crossed) |
 | `/plan <goal>` | Break a goal into an assigned task board |
 | `/run` | Run the task board sequentially |
 | `/tasks` | Show the task board |
@@ -211,12 +212,15 @@ Hand crew a high-level goal and it plans the work:
 ```
 
 - A planner LLM decomposes the goal into an **ordered task board**, each task assigned to the
-  best preset (e.g. `planner → coder×5 → tester×2`). `/tasks` shows the board.
+  best preset. On an empty/greenfield repo it skips a pointless "explore the codebase" step.
+  `/tasks` shows the board.
 - **`/run`** executes the board **one task at a time** — routing each to (or reusing) its preset,
-  waiting for the turn *and* its verify to settle before the next, marking `✓`/`✗`. Sequential on
-  purpose: agents share one working directory, so parallel builders aren't safe yet (per-agent
-  worktrees are the next roadmap item). Each green task is auto-checkpointed.
-- `/stop` halts the runner after the current task.
+  waiting for the turn *and* its verify to settle, marking `✓`/`✗`. A task that **fails verify
+  pauses the run** (so broken state doesn't cascade); fix it and `/run` resumes the rest. Each
+  green task is auto-checkpointed. Sequential on purpose (shared working dir; `/worktrees on`
+  isolates builders, parallel run is a follow-on).
+- `/stop` halts the runner after the current task; `/budget total <usd>` stops it once cumulative
+  spend crosses the cap.
 
 ### Verify + auto-fix
 
@@ -339,6 +343,7 @@ src/
 │   ├── verifyDecision.ts    # pure: next action (pass/fix/giveup) + fix prompt
 │   ├── routeHeuristics.ts   # pure keyword classifier for prompt routing
 │   ├── guardrails.ts        # pure destructive-command denylist
+│   ├── repoState.ts         # pure: is the repo greenfield? (planner hint)
 │   ├── sessionStore.ts      # save/restore crew + board (.crew/session.json)
 │   ├── auditLog.ts          # append-only audit trail (.crew/audit.jsonl)
 │   ├── mcpConfig.ts         # load MCP servers + settingSources (.crew/mcp.json)
@@ -381,7 +386,8 @@ loop is complete. Follow-ons:
 bun test               # 100+ unit tests (engine, store, commands, layout, windowing)
 bun run test:coverage  # with coverage (95%+ on non-UI code)
 bun run typecheck      # tsc --noEmit
-env -u ANTHROPIC_API_KEY bun run smoke   # live end-to-end check vs the real binary
+env -u ANTHROPIC_API_KEY bun run smoke      # live end-to-end check vs the real binary
+env -u ANTHROPIC_API_KEY bun run shakedown  # full plan→build→verify→checkpoint dry run in a temp repo
 ```
 
 [sdk]: https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk

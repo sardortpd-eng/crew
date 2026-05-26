@@ -109,6 +109,8 @@ type StoreState = {
   readonly checkpoints: readonly CheckpointInfo[];
   /** Per-turn spend cap in USD (null = no cap). */
   readonly perTurnBudgetUsd: number | null;
+  /** Cumulative session spend cap in USD (null = no cap). */
+  readonly sessionBudgetUsd: number | null;
   readonly tasks: readonly Task[];
   /** Whether builder agents are isolated into their own git worktrees. */
   readonly worktreesOn: boolean;
@@ -145,6 +147,7 @@ type StoreState = {
   cycleSafetyMode: () => void;
   setCheckpoints: (branch: string | null, checkpoints: readonly CheckpointInfo[]) => void;
   setBudget: (usd: number | null) => void;
+  setSessionBudget: (usd: number | null) => void;
   addTasks: (tasks: ReadonlyArray<{ title: string; preset: string }>) => void;
   setTaskStatus: (id: string, status: Task["status"]) => void;
   setTasks: (tasks: readonly Task[]) => void;
@@ -170,6 +173,7 @@ export const useStore = create<StoreState>((set, get) => ({
   checkpointBranch: null,
   checkpoints: [],
   perTurnBudgetUsd: null,
+  sessionBudgetUsd: null,
   tasks: [],
   worktreesOn: false,
 
@@ -317,6 +321,8 @@ export const useStore = create<StoreState>((set, get) => ({
   setCheckpoints: (branch, checkpoints) => set({ checkpointBranch: branch, checkpoints }),
 
   setBudget: (usd) => set({ perTurnBudgetUsd: usd }),
+
+  setSessionBudget: (usd) => set({ sessionBudgetUsd: usd }),
 
   addTasks: (tasks) =>
     set((s) => {

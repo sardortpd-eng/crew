@@ -14,6 +14,7 @@ export function HeaderBar() {
   const branch = useStore((s) => s.checkpointBranch);
   const checkpointCount = useStore((s) => s.checkpoints.length);
   const budget = useStore((s) => s.perTurnBudgetUsd);
+  const sessionBudget = useStore((s) => s.sessionBudgetUsd);
   const worktreesOn = useStore((s) => s.worktreesOn);
 
   const totals = aggregateTotals(stats);
@@ -34,6 +35,7 @@ export function HeaderBar() {
           {safetyLabel(safetyMode)}
         </Text>
         {budget !== null && <Text dimColor> · ${budget.toFixed(2)}/turn</Text>}
+        {sessionBudget !== null && <Text dimColor> · ${sessionBudget.toFixed(2)} cap</Text>}
         {worktreesOn && <Text dimColor> · ⑃ wt</Text>}
       </Box>
       <Box>

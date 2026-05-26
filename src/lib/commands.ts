@@ -33,7 +33,7 @@ export type Command =
   | { readonly kind: "checkpoint"; readonly label?: string }
   | { readonly kind: "undo" }
   | { readonly kind: "diff" }
-  | { readonly kind: "budget"; readonly usd?: number | null }
+  | { readonly kind: "budget"; readonly scope?: "turn" | "session"; readonly usd?: number | null }
   | { readonly kind: "plan"; readonly goal: string }
   | { readonly kind: "run" }
   | { readonly kind: "tasks" }
@@ -135,14 +135,19 @@ export function parseCommand(raw: string): Command {
       return { kind: "worktrees" };
     }
     case "budget": {
-      const arg = rest[0]?.toLowerCase();
-      if (!arg) return { kind: "budget" }; // show
-      if (arg === "off" || arg === "none" || arg === "0") return { kind: "budget", usd: null };
-      const usd = Number.parseFloat(arg.replace(/^\$/, ""));
-      if (!Number.isFinite(usd) || usd <= 0) {
-        return { kind: "error", message: "Usage: /budget <usd> | off" };
+      // `/budget total <usd>` = cumulative session cap; `/budget <usd>` = per-turn.
+      const session = rest[0]?.toLowerCase() === "total";
+      const scope = session ? "session" : "turn";
+      const valueArg = (session ? rest[1] : rest[0])?.toLowerCase();
+      if (!valueArg) return { kind: "budget", scope };
+      if (valueArg === "off" || valueArg === "none" || valueArg === "0") {
+        return { kind: "budget", scope, usd: null };
       }
-      return { kind: "budget", usd };
+      const usd = Number.parseFloat(valueArg.replace(/^\$/, ""));
+      if (!Number.isFinite(usd) || usd <= 0) {
+        return { kind: "error", message: "Usage: /budget [total] <usd> | off" };
+      }
+      return { kind: "budget", scope, usd };
     }
     case "help":
     case "?":
@@ -230,6 +235,7 @@ export const HELP_TEXT = [
   "/undo                    roll back the last checkpoint",
   "/diff                    show the latest checkpoint's changed files",
   "/budget [usd|off]        cap per-turn spend (e.g. /budget 0.50)",
+  "/budget total <usd|off>  cap total session spend (stops /run when crossed)",
   "/plan <goal>             break a goal into an assigned task list",
   "/run                     run the task board sequentially",
   "/tasks                   show the task board",

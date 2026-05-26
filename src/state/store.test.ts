@@ -20,6 +20,7 @@ const reset = () =>
     checkpointBranch: null,
     checkpoints: [],
     perTurnBudgetUsd: null,
+    sessionBudgetUsd: null,
     tasks: [],
     worktreesOn: false,
   });
@@ -253,6 +254,13 @@ describe("store", () => {
   test("setSafetyMode sets directly", () => {
     s().setSafetyMode("bypassPermissions");
     expect(s().safetyMode).toBe("bypassPermissions");
+  });
+
+  test("setSessionBudget sets/clears the cumulative cap", () => {
+    s().setSessionBudget(10);
+    expect(s().sessionBudgetUsd).toBe(10);
+    s().setSessionBudget(null);
+    expect(s().sessionBudgetUsd).toBeNull();
   });
 
   test("removeAgent clears scroll and stats too", () => {
