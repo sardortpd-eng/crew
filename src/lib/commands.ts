@@ -1,5 +1,6 @@
 import { PRESET_MODELS, type PresetModel } from "../engine/presets.ts";
 import type { SafetyMode } from "../state/store.ts";
+import { buildHelpText } from "./commandCatalog.ts";
 
 /** A `/preset` sub-operation. Semantic validation happens in the handler. */
 export type PresetOp =
@@ -250,39 +251,5 @@ function parsePresetCommand(rest: string[]): Command {
   return { kind: "error", message: `Unknown /preset subcommand: ${sub}` };
 }
 
-export const HELP_TEXT = [
-  "/spawn <preset> [task]   spawn an agent (see /preset for the list)",
-  "/broadcast <task>        send a task to every agent in parallel",
-  "/focus <id|number>       focus an agent's pane",
-  "/stop [id]               abort the focused agent (or by id)",
-  "/remove [id]             stop and remove the focused agent (or by id)",
-  "/preset                  list available presets",
-  "/preset new <name> <model> <mode> <tools,csv> <prompt>   create a preset",
-  "/preset rm <name>        remove a custom preset",
-  "/preset reload           reload presets from config files",
-  "/view [grid|focus]       switch layout (Ctrl+G toggles)",
-  "/verify [id|on|off]      run quality gates now, or toggle auto-verify",
-  "/route <prompt>          force crew to auto-assign an agent for a prompt",
-  "/mcp                     show configured MCP servers + connection status",
-  "/install <repo> [--global]  install skills/commands/MCP from a git repo",
-  "/install list            list installed plugins + their components",
-  "/uninstall <name>        remove an installed plugin",
-  "/mode [normal|plan|auto-edit|bypass]   set the safety mode (Shift+Tab cycles)",
-  "/model [opus|sonnet|haiku|default]   override the model for every agent",
-  "/checkpoint [label]      commit a git checkpoint now",
-  "/undo                    roll back the last checkpoint",
-  "/diff                    show the latest checkpoint's changed files",
-  "/budget [usd|off]        cap per-turn spend (e.g. /budget 0.50)",
-  "/budget total <usd|off>  cap total session spend (stops /run when crossed)",
-  "/plan <goal>             break a goal into an assigned task list",
-  "/run                     run the task board sequentially",
-  "/tasks                   show the task board",
-  "/save                    save this crew session to disk",
-  "/forget                  clear the saved session for this folder",
-  "/audit                   show the recent audit trail",
-  "/ship                    run the configured deploy + health-check gate",
-  "/worktrees [on|off|list]  isolate each builder in its own git worktree",
-  "/help                    show this help",
-  "/quit                    exit crew",
-  "<text>                   message the focused agent",
-].join("\n");
+/** Help text rendered for `/help`, derived from the command catalog. */
+export const HELP_TEXT = buildHelpText();

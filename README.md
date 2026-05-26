@@ -73,6 +73,10 @@ In grid view the prompt starts in **nav mode** so the keyboard drives the panes:
 
 ### Commands
 
+Type `/` to open an **autocomplete menu** — it filters as you type (`/mo` → `/mode`, `/model`),
+shows what each command does, and once you pick one it shows its argument hint (`/mode ` →
+`[normal|plan|auto-edit|bypass]`). Use **↑/↓** to select, **Tab** (or Enter on a partial) to fill it in.
+
 | Command | What it does |
 |---------|--------------|
 | `/spawn <preset> [task]` | Launch an agent; optionally give it a task immediately |
