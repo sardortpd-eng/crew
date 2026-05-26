@@ -13,6 +13,7 @@ export function HeaderBar() {
   const safetyMode = useStore((s) => s.safetyMode);
   const branch = useStore((s) => s.checkpointBranch);
   const checkpointCount = useStore((s) => s.checkpoints.length);
+  const budget = useStore((s) => s.perTurnBudgetUsd);
 
   const totals = aggregateTotals(stats);
 
@@ -31,6 +32,7 @@ export function HeaderBar() {
         <Text color={safetyColor(safetyMode)} bold={safetyMode === "bypassPermissions"}>
           {safetyLabel(safetyMode)}
         </Text>
+        {budget !== null && <Text dimColor> · ${budget.toFixed(2)}/turn</Text>}
       </Box>
       <Box>
         {branch && (

@@ -179,6 +179,17 @@ describe("AgentSession", () => {
     expect(errors).toHaveLength(1);
   });
 
+  test("reports a budget cap with a friendly message", async () => {
+    const query = makeMockQuery([resultError([], "sess-default", "error_max_budget_usd")]);
+    const session = new AgentSession("a-13", query);
+    const errors: Error[] = [];
+    session.on("error", (e) => errors.push(e));
+
+    await session.run("q", PARTIALS);
+
+    expect(errors[0]?.message).toContain("budget cap");
+  });
+
   test("emits mcp server statuses from the init message", async () => {
     const query = makeMockQuery([
       systemInit([{ name: "playwright", status: "connected" }]),

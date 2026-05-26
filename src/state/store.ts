@@ -97,6 +97,8 @@ type StoreState = {
   readonly safetyMode: SafetyMode;
   readonly checkpointBranch: string | null;
   readonly checkpoints: readonly CheckpointInfo[];
+  /** Per-turn spend cap in USD (null = no cap). */
+  readonly perTurnBudgetUsd: number | null;
 
   addAgent: (id: string, presetName: string) => void;
   removeAgent: (id: string) => void;
@@ -128,6 +130,7 @@ type StoreState = {
   setSafetyMode: (mode: SafetyMode) => void;
   cycleSafetyMode: () => void;
   setCheckpoints: (branch: string | null, checkpoints: readonly CheckpointInfo[]) => void;
+  setBudget: (usd: number | null) => void;
 };
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -147,6 +150,7 @@ export const useStore = create<StoreState>((set, get) => ({
   safetyMode: "normal",
   checkpointBranch: null,
   checkpoints: [],
+  perTurnBudgetUsd: null,
 
   addAgent: (id, presetName) =>
     set((s) => ({
@@ -285,6 +289,8 @@ export const useStore = create<StoreState>((set, get) => ({
     }),
 
   setCheckpoints: (branch, checkpoints) => set({ checkpointBranch: branch, checkpoints }),
+
+  setBudget: (usd) => set({ perTurnBudgetUsd: usd }),
 }));
 
 type Messages = Readonly<Record<string, readonly Message[]>>;

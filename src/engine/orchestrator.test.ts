@@ -99,6 +99,22 @@ describe("Orchestrator", () => {
     expect(query.calls[2]?.options?.allowDangerouslySkipPermissions).toBe(true);
   });
 
+  test("resolveBudget applies maxBudgetUsd to the turn options", async () => {
+    const query = makeMockQuery([resultSuccess("ok")]);
+    const orch = new Orchestrator({ queryFn: query, resolveBudget: () => ({ maxBudgetUsd: 0.5 }) });
+    const agent = orch.spawn(coder());
+    await orch.send(agent.id, "x");
+    expect(query.calls[0]?.options?.maxBudgetUsd).toBe(0.5);
+  });
+
+  test("a guardrail PreToolUse hook is always attached", async () => {
+    const query = makeMockQuery([resultSuccess("ok")]);
+    const orch = new Orchestrator({ queryFn: query });
+    const agent = orch.spawn(coder());
+    await orch.send(agent.id, "x");
+    expect(query.calls[0]?.options?.hooks?.PreToolUse?.length).toBeGreaterThan(0);
+  });
+
   test("resume id flows through on a second send to the same agent", async () => {
     const query = makeMockQuery([resultSuccess("ok", "sess-7")]);
     const orch = new Orchestrator({ queryFn: query });

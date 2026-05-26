@@ -190,8 +190,7 @@ export class AgentSession extends TypedEmitter<AgentSessionEvents> {
       this.setStatus("done");
     } else {
       this.setStatus("error");
-      const detail = message.errors?.join("; ") || message.subtype;
-      this.emit("error", new Error(detail));
+      this.emit("error", new Error(resultErrorMessage(message)));
     }
   }
 
@@ -203,6 +202,20 @@ export class AgentSession extends TypedEmitter<AgentSessionEvents> {
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
+}
+
+type ErrorResult = Exclude<Extract<SDKMessage, { type: "result" }>, { subtype: "success" }>;
+
+/** Friendly message for an error result, naming budget/turn caps explicitly. */
+function resultErrorMessage(message: ErrorResult): string {
+  switch (message.subtype) {
+    case "error_max_budget_usd":
+      return "budget cap reached — raise it with /budget";
+    case "error_max_turns":
+      return "turn cap reached";
+    default:
+      return message.errors?.join("; ") || message.subtype;
+  }
 }
 
 /** Maps a result message (success or error — both carry usage) into a {@link UsageSnapshot}. */

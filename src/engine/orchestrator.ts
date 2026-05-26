@@ -1,6 +1,7 @@
 import type { CanUseTool, PermissionMode, SettingSource } from "@anthropic-ai/claude-agent-sdk";
 import { AgentSession } from "./agentSession.ts";
 import { subscriptionEnv } from "./env.ts";
+import { createGuardrailHooks } from "./guardrailHook.ts";
 import type { Preset } from "./presets.ts";
 import type { McpServerConfig, Options, QueryFn } from "./types.ts";
 
@@ -19,6 +20,8 @@ export type OrchestratorConfig = {
    * current toggle.
    */
   readonly resolvePermissionMode?: () => PermissionMode | undefined;
+  /** Per-turn budget caps (USD / turns), read at send time. */
+  readonly resolveBudget?: () => { maxBudgetUsd?: number; maxTurns?: number };
 };
 
 /**
@@ -109,6 +112,9 @@ export class Orchestrator {
       allowedTools: [...preset.allowedTools],
       permissionMode,
       ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
+      // Always-on safety net: blocks destructive shell even in bypass mode.
+      hooks: createGuardrailHooks(),
+      ...(this.config.resolveBudget?.() ?? {}),
       includePartialMessages: true,
       ...(this.config.cwd ? { cwd: this.config.cwd } : {}),
       ...(this.config.makeCanUseTool ? { canUseTool: this.config.makeCanUseTool(agent) } : {}),

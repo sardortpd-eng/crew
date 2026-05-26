@@ -19,6 +19,7 @@ const reset = () =>
     safetyMode: "normal",
     checkpointBranch: null,
     checkpoints: [],
+    perTurnBudgetUsd: null,
   });
 
 const s = () => useStore.getState();

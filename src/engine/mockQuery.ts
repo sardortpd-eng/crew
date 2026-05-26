@@ -126,11 +126,15 @@ export function systemInit(
   } as unknown as SDKMessage;
 }
 
-/** Builds an error `result` message. */
-export function resultError(errors: string[], sessionId = SID): SDKMessage {
+/** Builds an error `result` message (default subtype: error_during_execution). */
+export function resultError(
+  errors: string[],
+  sessionId = SID,
+  subtype = "error_during_execution",
+): SDKMessage {
   return {
     type: "result",
-    subtype: "error_during_execution",
+    subtype,
     errors,
     is_error: true,
     session_id: sessionId,

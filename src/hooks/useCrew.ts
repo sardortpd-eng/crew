@@ -44,6 +44,10 @@ export function useCrew(cwd: string) {
         const mode = useStore.getState().safetyMode;
         return mode === "normal" ? undefined : mode;
       },
+      resolveBudget: () => {
+        const usd = useStore.getState().perTurnBudgetUsd;
+        return usd ? { maxBudgetUsd: usd } : {};
+      },
       makeCanUseTool: (agent) =>
         createPermissionHandler({
           allowedTools: [], // preset allowlist is enforced by the SDK; gate the rest
@@ -243,6 +247,18 @@ export function useCrew(cwd: string) {
       case "diff":
         void checkpoints.diff().then((text) => useStore.getState().setRouterStatus(text));
         return {};
+      case "budget": {
+        if (command.usd === undefined) {
+          const cur = useStore.getState().perTurnBudgetUsd;
+          return {
+            notice: cur ? `Per-turn budget: $${cur.toFixed(2)}` : "No per-turn budget set.",
+          };
+        }
+        useStore.getState().setBudget(command.usd);
+        return {
+          notice: command.usd ? `Per-turn budget: $${command.usd.toFixed(2)}` : "Budget cleared.",
+        };
+      }
       case "spawn":
         return spawn(command.preset, command.task);
       case "broadcast":

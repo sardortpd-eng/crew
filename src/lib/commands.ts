@@ -33,6 +33,7 @@ export type Command =
   | { readonly kind: "checkpoint"; readonly label?: string }
   | { readonly kind: "undo" }
   | { readonly kind: "diff" }
+  | { readonly kind: "budget"; readonly usd?: number | null }
   | { readonly kind: "help" }
   | { readonly kind: "quit" }
   | { readonly kind: "message"; readonly text: string }
@@ -101,6 +102,16 @@ export function parseCommand(raw: string): Command {
       return { kind: "undo" };
     case "diff":
       return { kind: "diff" };
+    case "budget": {
+      const arg = rest[0]?.toLowerCase();
+      if (!arg) return { kind: "budget" }; // show
+      if (arg === "off" || arg === "none" || arg === "0") return { kind: "budget", usd: null };
+      const usd = Number.parseFloat(arg.replace(/^\$/, ""));
+      if (!Number.isFinite(usd) || usd <= 0) {
+        return { kind: "error", message: "Usage: /budget <usd> | off" };
+      }
+      return { kind: "budget", usd };
+    }
     case "help":
     case "?":
       return { kind: "help" };
@@ -186,6 +197,7 @@ export const HELP_TEXT = [
   "/checkpoint [label]      commit a git checkpoint now",
   "/undo                    roll back the last checkpoint",
   "/diff                    show the latest checkpoint's changed files",
+  "/budget [usd|off]        cap per-turn spend (e.g. /budget 0.50)",
   "/help                    show this help",
   "/quit                    exit crew",
   "<text>                   message the focused agent",

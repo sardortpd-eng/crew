@@ -83,6 +83,7 @@ In grid view the prompt starts in **nav mode** so the keyboard drives the panes:
 | `/checkpoint [label]` | Commit a git checkpoint of the working tree now |
 | `/undo` | Roll back the last checkpoint |
 | `/diff` | Show the latest checkpoint's changed files |
+| `/budget [usd\|off]` | Cap per-turn spend (e.g. `/budget 0.50`) |
 | `/verify [id\|on\|off]` | Run quality gates now, or toggle auto-verify |
 | `/route <prompt>` | Force crew to auto-assign the best agent for a prompt |
 | `/stop [id]` | Abort the focused agent's turn (or one by id) |
@@ -208,6 +209,17 @@ Tools outside a preset's allowlist trigger an inline **allow / deny** prompt
 (`[y]`/`[n]`). Unanswered prompts auto-deny after 60s, so a forgotten approval never
 blocks an agent. The safety mode above can override this for the whole session.
 
+### Guardrails & budgets
+
+Two always-on safety nets independent of the permission mode:
+
+- **Command guardrail** — a `PreToolUse` hook blocks genuinely destructive shell (`rm -rf /`,
+  fork bombs, `mkfs`, `dd` to a disk, `git push --force`, `curl … | sh`, …) *even in `bypass`
+  mode*, where the normal prompt is skipped. The denylist is deliberately tight to avoid blocking
+  real work (`rm -rf node_modules` is fine).
+- **Budget cap** — `/budget 0.50` caps each turn's spend (SDK `maxBudgetUsd`); a turn that hits the
+  cap stops with "budget cap reached". `/budget off` clears it. Shown in the header as `$0.50/turn`.
+
 ### MCP servers & external tools
 
 Give agents extra tools — browser automation, a database, deploys, GitHub — by connecting
@@ -248,6 +260,7 @@ src/
 │   ├── verifyController.ts  # verify + auto-fix loop (serialized queue)
 │   ├── git.ts               # git ops via an injectable runner
 │   ├── checkpointController.ts # commit-on-green checkpoints + /undo
+│   ├── guardrailHook.ts     # PreToolUse hook blocking destructive shell
 │   ├── env.ts               # subscriptionEnv (strips ANTHROPIC_API_KEY)
 │   ├── types.ts             # shared engine types
 │   └── mockQuery.ts         # injectable mock generator for tests
@@ -260,6 +273,7 @@ src/
 │   ├── projectGates.ts      # detect quality gates from the repo (+ .crew/verify.json)
 │   ├── verifyDecision.ts    # pure: next action (pass/fix/giveup) + fix prompt
 │   ├── routeHeuristics.ts   # pure keyword classifier for prompt routing
+│   ├── guardrails.ts        # pure destructive-command denylist
 │   ├── mcpConfig.ts         # load MCP servers + settingSources (.crew/mcp.json)
 │   ├── toolResult.ts        # summarize a tool's output payload
 │   ├── gridLayout.ts        # pure grid geometry (dims, pane box, cells)
@@ -285,15 +299,13 @@ sessions and is never duplicated into the store.
 ## Roadmap
 
 Toward building production software with only AI. **Done so far:** auto-routing, verify +
-auto-fix, **MCP servers**, a **safety mode** toggle, and **git checkpoints** (commit-on-green +
-`/undo`). Next, in order:
+auto-fix, **MCP servers**, a **safety mode** toggle, **git checkpoints** (commit-on-green +
+`/undo`), and **guardrails + budgets**. Next, in order:
 
-1. **Guardrails + budgets** — `PreToolUse` hooks blocking destructive commands/secrets;
-   per-agent + global cost caps (`maxBudgetUsd`/`maxTurns`) with auto-stop.
-2. **Planner + task board** — a lead agent decomposes a goal and dispatches to workers
+1. **Planner + task board** — a lead agent decomposes a goal and dispatches to workers
    (`agents`/`delegate`); a shared persistent kanban.
-3. **Per-agent worktrees** — isolate concurrent builders so they can't collide in one tree.
-4. **Ship & observe** — a deploy/preview gate, session save/resume across restarts,
+2. **Per-agent worktrees** — isolate concurrent builders so they can't collide in one tree.
+3. **Ship & observe** — a deploy/preview gate, session save/resume across restarts,
    run history + audit trail.
 
 ## Development
