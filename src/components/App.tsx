@@ -74,8 +74,16 @@ export function App({ cwd }: { cwd: string }) {
     }
   });
 
-  /** Esc on an empty input line: leave grid typing, else interrupt a busy agent. */
+  /**
+   * Esc on an empty input line: dismiss a notice (e.g. /help), else leave grid
+   * typing, else interrupt a busy agent.
+   */
   function handleEscape(): void {
+    if (notice.length > 0 || routerStatus) {
+      setNotice("");
+      useStore.getState().setRouterStatus(null);
+      return;
+    }
     if (grid && typing) setTyping(false);
     else if (busy) crew.interrupt();
   }
