@@ -1,6 +1,6 @@
 import { TextInput } from "@inkjs/ui";
 import { Box, Text, useInput } from "ink";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { commandUsage, findCommand } from "../../lib/commandCatalog.ts";
 import { completeWith, suggestCommands } from "../../lib/commandSuggest.ts";
 import { useStore } from "../../state/store.ts";
@@ -33,6 +33,16 @@ export function InputBar({
   const suggestion = active && !pending ? suggestCommands(value) : { mode: "none" as const };
   const menuOpen = suggestion.mode === "list";
   const matches = suggestion.mode === "list" ? suggestion.matches : [];
+  const query = suggestion.mode === "list" ? suggestion.query : null;
+  // Keep the highlight in range; navigating never changes `query`, so it sticks.
+  const selectedIndex = matches.length > 0 ? Math.min(selected, matches.length - 1) : 0;
+
+  // Reset the highlight to the top only when the filter text actually changes.
+  // Navigating with ↑/↓ leaves `query` untouched, so the selection sticks.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — reset on query only
+  useEffect(() => {
+    setSelected(0);
+  }, [query]);
 
   useInput(
     (input) => {
@@ -50,7 +60,7 @@ export function InputBar({
       if (key.downArrow) setSelected((i) => Math.min(matches.length - 1, i + 1));
       else if (key.upArrow) setSelected((i) => Math.max(0, i - 1));
       else if (key.tab) {
-        const spec = matches[selected];
+        const spec = matches[selectedIndex];
         if (spec) replaceValue(completeWith(spec));
       }
     },
@@ -67,7 +77,6 @@ export function InputBar({
 
   function handleChange(next: string): void {
     setValue(next);
-    setSelected(0);
   }
 
   function handleSubmit(submitted: string): void {
@@ -75,7 +84,7 @@ export function InputBar({
     // match instead of running an unknown command. A fully-typed command runs.
     const partial = /^\/(\S*)$/.exec(submitted.trim());
     if (partial && !findCommand((partial[1] ?? "").toLowerCase())) {
-      const spec = matches[selected];
+      const spec = matches[selectedIndex];
       if (spec) {
         replaceValue(completeWith(spec));
         return;
@@ -117,7 +126,7 @@ export function InputBar({
 
   return (
     <Box flexDirection="column">
-      {menuOpen && <CommandMenu matches={matches} selected={selected} />}
+      {menuOpen && <CommandMenu matches={matches} selected={selectedIndex} />}
       {suggestion.mode === "hint" && (
         <Box paddingX={1}>
           <Text color={ACCENT}>{commandUsage(suggestion.spec)}</Text>
