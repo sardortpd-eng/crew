@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useAltScreen } from "../hooks/useAltScreen.ts";
 import { useCrew } from "../hooks/useCrew.ts";
 import { useGridKeys } from "../hooks/useGridKeys.ts";
+import { useTerminalSize } from "../hooks/useTerminalSize.ts";
 import { useStore } from "../state/store.ts";
 import { GridView } from "./grid/GridView.tsx";
 import { HeaderBar } from "./HeaderBar.tsx";
@@ -37,6 +38,18 @@ export function App({ cwd }: { cwd: string }) {
 
   const grid = viewMode === "grid";
   const inputActive = (!grid || typing) && !hasPending;
+
+  // A tall notice (e.g. /help) is shown as a viewport-capped overlay that hides
+  // the body while it's up, so no rendered frame ever exceeds the terminal
+  // height — which is what leaves stale lines stuck above the header otherwise.
+  const { rows } = useTerminalSize();
+  const noticeLines = notice.length > 0 ? notice.split("\n") : [];
+  const noticeOverlay = noticeLines.length > SHORT_NOTICE_LINES;
+  const maxNoticeRows = Math.max(SHORT_NOTICE_LINES, rows - RESERVED_ROWS);
+  const shownNotice =
+    noticeLines.length > maxNoticeRows
+      ? [...noticeLines.slice(0, maxNoticeRows - 1), "… (resize the terminal to see the rest)"]
+      : noticeLines;
 
   useAltScreen(true);
   useGridKeys(grid && !inputActive && !hasPending);
@@ -101,34 +114,50 @@ export function App({ cwd }: { cwd: string }) {
   return (
     <Box flexDirection="column" paddingX={1}>
       <HeaderBar />
-      {!grid && <AgentBar />}
 
-      {grid ? <GridView /> : <AgentPane />}
-
-      {!grid && <TaskBoard />}
-
-      {!grid && busy && focused && (
-        <Box marginTop={1}>
-          <StatusLine status={focused.status} />
-        </Box>
-      )}
-
-      {!grid && <VerifyLine />}
-
-      {routerStatus && (
-        <Box>
-          <Text color={ACCENT}>{routerStatus}</Text>
-        </Box>
-      )}
-
-      {notice.length > 0 && (
+      {noticeOverlay ? (
         <Box marginTop={1} flexDirection="column">
-          {notice.split("\n").map((line, i) => (
+          {shownNotice.map((line, i) => (
             <Text key={i} dimColor>
               {line}
             </Text>
           ))}
+          <Box marginTop={1}>
+            <Text dimColor>Esc to dismiss</Text>
+          </Box>
         </Box>
+      ) : (
+        <>
+          {!grid && <AgentBar />}
+
+          {grid ? <GridView /> : <AgentPane />}
+
+          {!grid && <TaskBoard />}
+
+          {!grid && busy && focused && (
+            <Box marginTop={1}>
+              <StatusLine status={focused.status} />
+            </Box>
+          )}
+
+          {!grid && <VerifyLine />}
+
+          {routerStatus && (
+            <Box>
+              <Text color={ACCENT}>{routerStatus}</Text>
+            </Box>
+          )}
+
+          {noticeLines.length > 0 && (
+            <Box marginTop={1} flexDirection="column">
+              {noticeLines.map((line, i) => (
+                <Text key={i} dimColor>
+                  {line}
+                </Text>
+              ))}
+            </Box>
+          )}
+        </>
       )}
 
       <Box marginTop={1}>
@@ -139,6 +168,11 @@ export function App({ cwd }: { cwd: string }) {
     </Box>
   );
 }
+
+/** Notices up to this many lines render inline; taller ones take over as an overlay. */
+const SHORT_NOTICE_LINES = 4;
+/** Rows reserved for the header, input box, hint, and margins around the notice. */
+const RESERVED_ROWS = 9;
 
 /** Dim shortcut hint under the input box. */
 function Hint({
