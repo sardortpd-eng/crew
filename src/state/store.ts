@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import type { PresetModel } from "../engine/presets.ts";
+import { capMessages, capRecord } from "../lib/historyCap.ts";
 import type { InstalledPlugin } from "../lib/installStore.ts";
+
+/** Per-agent transcript cap (older messages drop off; rendering windows anyway). */
+const MAX_MESSAGES = 200;
+/** Global tool-result cap (oldest evicted; each summary is already ≤200 chars). */
+const MAX_TOOL_RESULTS = 500;
 import type {
   AccountInfo,
   AgentStatus,
@@ -304,7 +310,7 @@ export const useStore = create<StoreState>((set, get) => ({
     }),
 
   setToolResult: (toolUseId, summary) =>
-    set((s) => ({ toolResults: { ...s.toolResults, [toolUseId]: summary } })),
+    set((s) => ({ toolResults: capRecord(s.toolResults, toolUseId, summary, MAX_TOOL_RESULTS) })),
 
   setAccount: (info) => set({ account: info }),
 
@@ -365,7 +371,7 @@ type OpenAssistant = Extract<Message, { role: "assistant" }>;
 
 function appendMessage(messages: Messages, id: string, message: Message): Messages {
   const list = messages[id] ?? [];
-  return { ...messages, [id]: [...list, message] };
+  return { ...messages, [id]: capMessages([...list, message], MAX_MESSAGES) };
 }
 
 /**
@@ -386,5 +392,5 @@ function updateOpenAssistant(
   }
 
   const fresh: OpenAssistant = { role: "assistant", text: "", tools: [], done: false };
-  return { ...messages, [id]: [...list, update(fresh)] };
+  return { ...messages, [id]: capMessages([...list, update(fresh)], MAX_MESSAGES) };
 }
