@@ -38,6 +38,14 @@ export type AgentStats = {
   readonly model: string;
 };
 
+/** One item on the task board (from `/plan`). */
+export type Task = {
+  readonly id: string;
+  readonly title: string;
+  readonly preset: string;
+  readonly status: "todo" | "active" | "done" | "failed";
+};
+
 /** One git checkpoint commit made by crew. */
 export type CheckpointInfo = {
   readonly sha: string;
@@ -99,6 +107,7 @@ type StoreState = {
   readonly checkpoints: readonly CheckpointInfo[];
   /** Per-turn spend cap in USD (null = no cap). */
   readonly perTurnBudgetUsd: number | null;
+  readonly tasks: readonly Task[];
 
   addAgent: (id: string, presetName: string) => void;
   removeAgent: (id: string) => void;
@@ -131,6 +140,9 @@ type StoreState = {
   cycleSafetyMode: () => void;
   setCheckpoints: (branch: string | null, checkpoints: readonly CheckpointInfo[]) => void;
   setBudget: (usd: number | null) => void;
+  addTasks: (tasks: ReadonlyArray<{ title: string; preset: string }>) => void;
+  setTaskStatus: (id: string, status: Task["status"]) => void;
+  clearTasks: () => void;
 };
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -151,6 +163,7 @@ export const useStore = create<StoreState>((set, get) => ({
   checkpointBranch: null,
   checkpoints: [],
   perTurnBudgetUsd: null,
+  tasks: [],
 
   addAgent: (id, presetName) =>
     set((s) => ({
@@ -291,6 +304,23 @@ export const useStore = create<StoreState>((set, get) => ({
   setCheckpoints: (branch, checkpoints) => set({ checkpointBranch: branch, checkpoints }),
 
   setBudget: (usd) => set({ perTurnBudgetUsd: usd }),
+
+  addTasks: (tasks) =>
+    set((s) => {
+      const base = s.tasks.length;
+      const next = tasks.map((t, i) => ({
+        id: `task-${base + i + 1}`,
+        title: t.title,
+        preset: t.preset,
+        status: "todo" as const,
+      }));
+      return { tasks: [...s.tasks, ...next] };
+    }),
+
+  setTaskStatus: (id, status) =>
+    set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, status } : t)) })),
+
+  clearTasks: () => set({ tasks: [] }),
 }));
 
 type Messages = Readonly<Record<string, readonly Message[]>>;

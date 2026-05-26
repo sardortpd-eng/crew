@@ -84,6 +84,9 @@ In grid view the prompt starts in **nav mode** so the keyboard drives the panes:
 | `/undo` | Roll back the last checkpoint |
 | `/diff` | Show the latest checkpoint's changed files |
 | `/budget [usd\|off]` | Cap per-turn spend (e.g. `/budget 0.50`) |
+| `/plan <goal>` | Break a goal into an assigned task board |
+| `/run` | Run the task board sequentially |
+| `/tasks` | Show the task board |
 | `/verify [id\|on\|off]` | Run quality gates now, or toggle auto-verify |
 | `/route <prompt>` | Force crew to auto-assign the best agent for a prompt |
 | `/stop [id]` | Abort the focused agent's turn (or one by id) |
@@ -154,6 +157,22 @@ follow-up question for the reviewer...
 
 Each agent is an independent SDK session, so they stream concurrently. Following up on a
 focused agent resumes its session, so it remembers context.
+
+### Plan → task board → run
+
+Hand crew a high-level goal and it plans the work:
+
+```text
+/plan build a CLI todo app with add/list/done commands and tests
+```
+
+- A planner LLM decomposes the goal into an **ordered task board**, each task assigned to the
+  best preset (e.g. `planner → coder×5 → tester×2`). `/tasks` shows the board.
+- **`/run`** executes the board **one task at a time** — routing each to (or reusing) its preset,
+  waiting for the turn *and* its verify to settle before the next, marking `✓`/`✗`. Sequential on
+  purpose: agents share one working directory, so parallel builders aren't safe yet (per-agent
+  worktrees are the next roadmap item). Each green task is auto-checkpointed.
+- `/stop` halts the runner after the current task.
 
 ### Verify + auto-fix
 
@@ -261,6 +280,7 @@ src/
 │   ├── git.ts               # git ops via an injectable runner
 │   ├── checkpointController.ts # commit-on-green checkpoints + /undo
 │   ├── guardrailHook.ts     # PreToolUse hook blocking destructive shell
+│   ├── planner.ts           # decompose a goal into assigned tasks (LLM)
 │   ├── env.ts               # subscriptionEnv (strips ANTHROPIC_API_KEY)
 │   ├── types.ts             # shared engine types
 │   └── mockQuery.ts         # injectable mock generator for tests
@@ -300,13 +320,13 @@ sessions and is never duplicated into the store.
 
 Toward building production software with only AI. **Done so far:** auto-routing, verify +
 auto-fix, **MCP servers**, a **safety mode** toggle, **git checkpoints** (commit-on-green +
-`/undo`), and **guardrails + budgets**. Next, in order:
+`/undo`), **guardrails + budgets**, and a **planner + task board** (`/plan` → `/run`). Next:
 
-1. **Planner + task board** — a lead agent decomposes a goal and dispatches to workers
-   (`agents`/`delegate`); a shared persistent kanban.
-2. **Per-agent worktrees** — isolate concurrent builders so they can't collide in one tree.
-3. **Ship & observe** — a deploy/preview gate, session save/resume across restarts,
+1. **Per-agent worktrees** — isolate concurrent builders so they can't collide in one tree
+   (then the task runner can go parallel instead of sequential).
+2. **Ship & observe** — a deploy/preview gate, session save/resume across restarts,
    run history + audit trail.
+3. **Persistent task board** — save the board (and sessions) to disk so a plan survives restarts.
 
 ## Development
 

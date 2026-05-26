@@ -20,6 +20,7 @@ const reset = () =>
     checkpointBranch: null,
     checkpoints: [],
     perTurnBudgetUsd: null,
+    tasks: [],
   });
 
 const s = () => useStore.getState();
@@ -215,6 +216,25 @@ describe("store", () => {
     expect(s().safetyMode).toBe("bypassPermissions");
     s().cycleSafetyMode();
     expect(s().safetyMode).toBe("normal");
+  });
+
+  test("addTasks assigns ids/todo; setTaskStatus updates; clearTasks empties", () => {
+    s().addTasks([
+      { title: "scaffold", preset: "coder" },
+      { title: "review", preset: "reviewer" },
+    ]);
+    const tasks = s().tasks;
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0]).toMatchObject({ id: "task-1", status: "todo", preset: "coder" });
+
+    s().setTaskStatus("task-1", "done");
+    expect(s().tasks[0]?.status).toBe("done");
+
+    s().addTasks([{ title: "more", preset: "coder" }]); // ids keep counting
+    expect(s().tasks[2]?.id).toBe("task-3");
+
+    s().clearTasks();
+    expect(s().tasks).toHaveLength(0);
   });
 
   test("setSafetyMode sets directly", () => {

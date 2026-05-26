@@ -10,6 +10,7 @@ import { InputBar } from "./input/InputBar.tsx";
 import { AgentPane } from "./pane/AgentPane.tsx";
 import { StatusLine } from "./StatusLine.tsx";
 import { AgentBar } from "./sidebar/AgentBar.tsx";
+import { TaskBoard } from "./TaskBoard.tsx";
 import { ACCENT, isBusy } from "./theme.ts";
 import { VerifyLine } from "./VerifyLine.tsx";
 
@@ -88,6 +89,8 @@ export function App({ cwd }: { cwd: string }) {
       {!grid && <AgentBar />}
 
       {grid ? <GridView /> : <AgentPane />}
+
+      {!grid && <TaskBoard />}
 
       {!grid && busy && focused && (
         <Box marginTop={1}>

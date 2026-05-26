@@ -2,7 +2,14 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { useRef } from "react";
 import { CheckpointController } from "../engine/checkpointController.ts";
 import { Orchestrator, type SpawnedAgent } from "../engine/orchestrator.ts";
-import { getPreset, isBuilderPreset, listPresets, presetNames } from "../engine/presets.ts";
+import { planGoal } from "../engine/planner.ts";
+import {
+  getPreset,
+  isBuilderPreset,
+  listPresets,
+  type Preset,
+  presetNames,
+} from "../engine/presets.ts";
 import { routePrompt } from "../engine/router.ts";
 import { VerifyController } from "../engine/verifyController.ts";
 import { HELP_TEXT, parseCommand } from "../lib/commands.ts";
@@ -27,6 +34,8 @@ export function useCrew(cwd: string) {
   const checkpointRef = useRef<CheckpointController | null>(null);
   const autoVerifyRef = useRef<boolean>(true);
   const routingRef = useRef<boolean>(false);
+  const planRunningRef = useRef<boolean>(false);
+  const planAbortRef = useRef<boolean>(false);
   const mcpServersRef = useRef<readonly string[]>([]);
   const startupNoticeRef = useRef<string | undefined>(undefined);
 
@@ -133,18 +142,30 @@ export function useCrew(cwd: string) {
     verifier.enqueue(agent.id);
   }
 
-  function spawn(presetName: string, task?: string): InputResult {
-    const preset = getPreset(presetName);
-    if (!preset) {
-      return { notice: `Unknown preset "${presetName}". Try: ${presetNames().join(", ")}` };
-    }
+  /** Spawns + wires + registers + focuses a new agent (no turn started). */
+  function createAgent(preset: Preset): string {
     const agent = orchestrator.spawn(preset);
     wire(agent);
     useStore.getState().addAgent(agent.id, preset.name);
     useStore.getState().focus(agent.id);
     autoView();
-    if (task) sendTo(agent.id, task);
-    return { notice: `Spawned ${agent.id}${task ? ` · running task` : ""}` };
+    return agent.id;
+  }
+
+  /** Returns an existing agent of the preset, or spawns one. */
+  function ensureAgent(preset: Preset): string {
+    const existing = useStore.getState().agents.find((a) => a.presetName === preset.name);
+    return existing ? existing.id : createAgent(preset);
+  }
+
+  function spawn(presetName: string, task?: string): InputResult {
+    const preset = getPreset(presetName);
+    if (!preset) {
+      return { notice: `Unknown preset "${presetName}". Try: ${presetNames().join(", ")}` };
+    }
+    const id = createAgent(preset);
+    if (task) sendTo(id, task);
+    return { notice: `Spawned ${id}${task ? ` · running task` : ""}` };
   }
 
   /** Auto-promote to grid at 2+ agents, demote to focus at ≤1 (unless locked). */
@@ -166,6 +187,54 @@ export function useCrew(cwd: string) {
     for (const a of agents) useStore.getState().addUserMessage(a.id, task);
     void orchestrator.broadcast(task);
     return { notice: `Broadcast to ${agents.length} agent(s)` };
+  }
+
+  /** Decomposes a goal into an assigned task board (does not run it). */
+  async function plan(goal: string): Promise<void> {
+    useStore.getState().setRouterStatus("↳ planning…");
+    const tasks = await planGoal(goal, listPresets(), { queryFn: query });
+    useStore.getState().addTasks(tasks);
+    useStore.getState().setRouterStatus(`↳ planned ${tasks.length} task(s) · /run to execute`);
+  }
+
+  /** Runs the task board one task at a time (safe under a shared working dir). */
+  async function runPlan(): Promise<void> {
+    if (planRunningRef.current) return;
+    planRunningRef.current = true;
+    planAbortRef.current = false;
+    try {
+      for (;;) {
+        if (planAbortRef.current) break;
+        const task = useStore.getState().tasks.find((t) => t.status === "todo");
+        if (!task) break;
+
+        const preset = getPreset(task.preset) ?? getPreset("coder");
+        if (!preset) {
+          useStore.getState().setTaskStatus(task.id, "failed");
+          continue;
+        }
+        useStore.getState().setTaskStatus(task.id, "active");
+        const id = ensureAgent(preset);
+        await sendAndSettle(id, task.title);
+        const status = useStore.getState().agents.find((a) => a.id === id)?.status;
+        useStore.getState().setTaskStatus(task.id, status === "error" ? "failed" : "done");
+      }
+    } finally {
+      planRunningRef.current = false;
+      const done = useStore.getState().tasks.filter((t) => t.status === "done").length;
+      const total = useStore.getState().tasks.length;
+      useStore.getState().setRouterStatus(`↳ run complete · ${done}/${total} done`);
+    }
+  }
+
+  /** Runs one turn and waits for any follow-on verify to settle (≤2 min). */
+  async function sendAndSettle(id: string, prompt: string): Promise<void> {
+    useStore.getState().addUserMessage(id, prompt);
+    await orchestrator.send(id, prompt).catch(() => undefined);
+    const start = Date.now();
+    while (verifier.isVerifying(id) && Date.now() - start < 120_000) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
   }
 
   /** Classifies a prompt and assigns it to the best agent (reuse, else spawn). */
@@ -247,6 +316,18 @@ export function useCrew(cwd: string) {
       case "diff":
         void checkpoints.diff().then((text) => useStore.getState().setRouterStatus(text));
         return {};
+      case "plan":
+        void plan(command.goal);
+        return { notice: "Planning…" };
+      case "run": {
+        if (useStore.getState().tasks.some((t) => t.status === "todo")) {
+          void runPlan();
+          return { notice: "Running task board…" };
+        }
+        return { notice: "No todo tasks. /plan <goal> first." };
+      }
+      case "tasks":
+        return { notice: describeTasks() };
       case "budget": {
         if (command.usd === undefined) {
           const cur = useStore.getState().perTurnBudgetUsd;
@@ -264,6 +345,7 @@ export function useCrew(cwd: string) {
       case "broadcast":
         return broadcast(command.task);
       case "stop": {
+        planAbortRef.current = true; // halt the task runner after the current task
         const id = resolveId(command.id);
         if (!id) return { notice: "No agent to stop." };
         orchestrator.stop(id);
@@ -322,6 +404,16 @@ export function useCrew(cwd: string) {
   }
 
   return { handleInput, interrupt, startupNotice: startupNoticeRef.current };
+}
+
+const TASK_GLYPH: Record<string, string> = { todo: "☐", active: "▶", done: "✓", failed: "✗" };
+
+/** Renders `/tasks`: the board as a checklist. */
+function describeTasks(): string {
+  const tasks = useStore.getState().tasks;
+  if (tasks.length === 0) return "No tasks. /plan <goal> to create some.";
+  const lines = tasks.map((t) => `  ${TASK_GLYPH[t.status] ?? "·"} [${t.preset}] ${t.title}`);
+  return ["Task board:", ...lines].join("\n");
 }
 
 /** Joins non-empty startup notices onto separate lines. */

@@ -34,6 +34,9 @@ export type Command =
   | { readonly kind: "undo" }
   | { readonly kind: "diff" }
   | { readonly kind: "budget"; readonly usd?: number | null }
+  | { readonly kind: "plan"; readonly goal: string }
+  | { readonly kind: "run" }
+  | { readonly kind: "tasks" }
   | { readonly kind: "help" }
   | { readonly kind: "quit" }
   | { readonly kind: "message"; readonly text: string }
@@ -102,6 +105,13 @@ export function parseCommand(raw: string): Command {
       return { kind: "undo" };
     case "diff":
       return { kind: "diff" };
+    case "plan":
+      if (!args) return { kind: "error", message: "Usage: /plan <goal>" };
+      return { kind: "plan", goal: args };
+    case "run":
+      return { kind: "run" };
+    case "tasks":
+      return { kind: "tasks" };
     case "budget": {
       const arg = rest[0]?.toLowerCase();
       if (!arg) return { kind: "budget" }; // show
@@ -198,6 +208,9 @@ export const HELP_TEXT = [
   "/undo                    roll back the last checkpoint",
   "/diff                    show the latest checkpoint's changed files",
   "/budget [usd|off]        cap per-turn spend (e.g. /budget 0.50)",
+  "/plan <goal>             break a goal into an assigned task list",
+  "/run                     run the task board sequentially",
+  "/tasks                   show the task board",
   "/help                    show this help",
   "/quit                    exit crew",
   "<text>                   message the focused agent",
