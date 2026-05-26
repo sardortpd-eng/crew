@@ -74,6 +74,33 @@ export async function resetHard(
   return res.ok;
 }
 
+export type MergeResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly conflict: boolean; readonly error: string };
+
+/**
+ * Merges `branch` into the current branch with a merge commit (`--no-ff`).
+ * Distinguishes a merge conflict (which leaves the tree mid-merge) from other
+ * failures so the caller can tell the user to resolve vs. retry.
+ */
+export async function merge(
+  cwd: string,
+  branch: string,
+  run: GitRunner = bunGit,
+): Promise<MergeResult> {
+  const res = await run(["merge", "--no-ff", "-m", `crew: merge ${branch}`, branch], cwd);
+  if (res.ok) return { ok: true };
+  const out = `${res.stdout} ${res.stderr}`;
+  const conflict = /conflict/i.test(out);
+  return { ok: false, conflict, error: res.stderr || res.stdout || "merge failed" };
+}
+
+/** Aborts an in-progress merge (used to clean up after a reported conflict). */
+export async function mergeAbort(cwd: string, run: GitRunner = bunGit): Promise<boolean> {
+  const res = await run(["merge", "--abort"], cwd);
+  return res.ok;
+}
+
 /** Returns a `--stat` summary for a commit (default HEAD). */
 export async function showStat(
   cwd: string,

@@ -60,6 +60,11 @@ export class WorktreeController {
     return this.agents.get(agentId)?.path;
   }
 
+  /** The branch an agent's worktree commits to (`crew/wt-<id>`), if it has one. */
+  branchFor(agentId: string): string | undefined {
+    return this.agents.get(agentId)?.branch;
+  }
+
   /** Creates (or reuses) an isolated worktree for an agent; null if unavailable. */
   async acquire(agentId: string): Promise<string | null> {
     const existing = this.agents.get(agentId);

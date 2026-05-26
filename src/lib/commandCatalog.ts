@@ -65,6 +65,11 @@ export const COMMAND_CATALOG: readonly CommandSpec[] = [
     summary: "Isolate each builder in its own git worktree",
     aliases: ["wt"],
   },
+  {
+    name: "merge",
+    args: "<agent>",
+    summary: "Merge a builder's worktree branch back into the base",
+  },
   { name: "ship", summary: "Run the configured deploy + health-check gate" },
   { name: "audit", summary: "Show the recent audit trail" },
   { name: "save", summary: "Save this crew session to disk" },

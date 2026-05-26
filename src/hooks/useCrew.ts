@@ -19,6 +19,7 @@ import { taskOutcome } from "../lib/verifyDecision.ts";
 import { VerifyController } from "../engine/verifyController.ts";
 import { HELP_TEXT, parseCommand } from "../lib/commands.ts";
 import { runGate } from "../engine/verifier.ts";
+import { merge } from "../engine/git.ts";
 import { appendAudit, readAudit } from "../lib/auditLog.ts";
 import { addMcpServer, loadMcpConfig, parseServerSpec } from "../lib/mcpConfig.ts";
 import type { McpServerConfig } from "../engine/types.ts";
@@ -632,6 +633,27 @@ export function useCrew(cwd: string) {
       .setRouterStatus(`Updated ${ok} plugin(s)${failed ? `, ${failed} failed` : ""}.`);
   }
 
+  /** Merges an agent's worktree branch into the base branch; reports conflicts. */
+  async function mergeWorktree(id: string): Promise<void> {
+    const setStatus = (msg: string) => useStore.getState().setRouterStatus(msg);
+    const branch = worktrees.branchFor(id);
+    if (!branch) {
+      setStatus(`${id} has no worktree branch — enable /worktrees and let it work first.`);
+      return;
+    }
+    setStatus(`Merging ${branch}…`);
+    const result = await merge(cwd, branch);
+    if (result.ok) {
+      logAudit("merge", id, branch);
+      setStatus(`✓ merged ${branch} into the base branch.`);
+    } else if (result.conflict) {
+      logAudit("merge", id, `conflict ${branch}`);
+      setStatus(`⚠ merge conflict on ${branch} — resolve it and commit (merge left in progress).`);
+    } else {
+      setStatus(`Merge failed: ${result.error}`);
+    }
+  }
+
   function handleInput(raw: string): InputResult {
     const command = parseCommand(raw);
     switch (command.kind) {
@@ -715,6 +737,12 @@ export function useCrew(cwd: string) {
       case "ship":
         void ship();
         return { notice: "Shipping…" };
+      case "merge": {
+        const id = resolveId(command.agent);
+        if (!id) return { notice: `No agent matching "${command.agent}".` };
+        void mergeWorktree(id);
+        return {};
+      }
       case "worktrees": {
         const action = command.action ?? "list";
         if (action === "on") {

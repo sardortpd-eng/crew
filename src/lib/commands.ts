@@ -65,6 +65,7 @@ export type Command =
   | { readonly kind: "audit" }
   | { readonly kind: "ship" }
   | { readonly kind: "worktrees"; readonly action?: "on" | "off" | "list" | "clean" }
+  | { readonly kind: "merge"; readonly agent: string }
   | { readonly kind: "help" }
   | { readonly kind: "quit" }
   | { readonly kind: "message"; readonly text: string }
@@ -188,6 +189,9 @@ export function parseCommand(raw: string): Command {
       return { kind: "audit" };
     case "ship":
       return { kind: "ship" };
+    case "merge":
+      if (!rest[0]) return { kind: "error", message: "Usage: /merge <agent id|number>" };
+      return { kind: "merge", agent: rest[0] };
     case "worktrees":
     case "wt": {
       const arg = rest[0]?.toLowerCase();
