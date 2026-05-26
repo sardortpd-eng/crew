@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { dirname } from "node:path";
 import { join } from "node:path";
 import { z } from "zod";
 import type { McpServerConfig, Options } from "../engine/types.ts";
@@ -64,6 +65,62 @@ export function loadMcpConfig(cwd: string): McpConfig {
   }
 
   return { mcpServers: servers, settingSources, warnings };
+}
+
+/** A server config parsed from a `/mcp add` spec. */
+export type ServerConfig = z.infer<typeof serverSchema>;
+
+export type ParsedServer =
+  | { readonly ok: true; readonly server: ServerConfig }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * Parses the trailing tokens of `/mcp add <name> …` into a server config: a URL
+ * first token becomes a remote (http) server, anything else a stdio command +
+ * args. Validated against the same schema the loader uses. Pure.
+ */
+export function parseServerSpec(tokens: readonly string[]): ParsedServer {
+  const first = tokens[0];
+  if (!first) return { ok: false, error: "provide a command or URL" };
+  const candidate = /^https?:\/\//.test(first)
+    ? { type: "http" as const, url: first }
+    : { command: first, args: tokens.slice(1) };
+  const result = serverSchema.safeParse(candidate);
+  if (!result.success) {
+    return { ok: false, error: result.error.issues.map((i) => i.message).join("; ") };
+  }
+  return { ok: true, server: result.data };
+}
+
+/**
+ * Adds (or replaces) a named server in the project `.crew/mcp.json`, creating
+ * the file if absent. Merges with any existing config. Never throws.
+ */
+export function addMcpServer(
+  cwd: string,
+  name: string,
+  server: ServerConfig,
+): { ok: true } | { ok: false; error: string } {
+  if (!/^[\w-]+$/.test(name)) {
+    return { ok: false, error: "server name must be letters, digits, '-' or '_'" };
+  }
+  const path = projectMcpPath(cwd);
+  let existing: z.infer<typeof fileSchema> = {};
+  if (existsSync(path)) {
+    try {
+      const parsed = fileSchema.safeParse(JSON.parse(readFileSync(path, "utf8")));
+      if (parsed.success) existing = parsed.data;
+    } catch {
+      return { ok: false, error: `${path}: invalid JSON; fix or remove it first` };
+    }
+  }
+  const next = {
+    ...existing,
+    mcpServers: { ...(existing.mcpServers ?? {}), [name]: server },
+  };
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`);
+  return { ok: true };
 }
 
 function readConfigFile(path: string, warnings: string[]): z.infer<typeof fileSchema> | null {

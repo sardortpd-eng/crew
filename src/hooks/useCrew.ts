@@ -20,7 +20,8 @@ import { VerifyController } from "../engine/verifyController.ts";
 import { HELP_TEXT, parseCommand } from "../lib/commands.ts";
 import { runGate } from "../engine/verifier.ts";
 import { appendAudit, readAudit } from "../lib/auditLog.ts";
-import { loadMcpConfig } from "../lib/mcpConfig.ts";
+import { addMcpServer, loadMcpConfig, parseServerSpec } from "../lib/mcpConfig.ts";
+import type { McpServerConfig } from "../engine/types.ts";
 import { parseInstallArg } from "../lib/installSource.ts";
 import { installFromGit, listInstalled, removeInstalled } from "../lib/installStore.ts";
 import { loadShipConfig } from "../lib/projectGates.ts";
@@ -60,12 +61,12 @@ export function useCrew(cwd: string) {
   const planAbortRef = useRef<boolean>(false);
   const restoredRef = useRef<boolean>(false);
   const leadServerRef = useRef<boolean>(false);
-  const mcpServersRef = useRef<readonly string[]>([]);
+  const mcpConfigRef = useRef<Record<string, McpServerConfig>>({});
   const startupNoticeRef = useRef<string | undefined>(undefined);
 
   if (orchestratorRef.current === null) {
     const mcp = loadMcpConfig(cwd);
-    mcpServersRef.current = Object.keys(mcp.mcpServers);
+    mcpConfigRef.current = { ...mcp.mcpServers };
     const installed = listInstalled(cwd);
     useStore.getState().setInstalledPlugins(installed);
     startupNoticeRef.current = joinNotices(
@@ -76,7 +77,8 @@ export function useCrew(cwd: string) {
     orchestratorRef.current = new Orchestrator({
       queryFn: query,
       cwd,
-      mcpServers: mcp.mcpServers,
+      // Read live so a `/mcp add` applies on the next turn (no restart).
+      resolveMcpServers: () => mcpConfigRef.current,
       settingSources: mcp.settingSources,
       // Session-wide safety toggle: "normal" → each preset decides; else override.
       resolvePermissionMode: () => {
@@ -613,8 +615,18 @@ export function useCrew(cwd: string) {
       case "route":
         void route(command.prompt);
         return {};
-      case "mcp":
-        return { notice: describeMcp(mcpServersRef.current) };
+      case "mcp": {
+        if (command.op?.type === "add") {
+          const parsed = parseServerSpec(command.op.spec);
+          if (!parsed.ok) return { notice: `Invalid server: ${parsed.error}` };
+          const result = addMcpServer(cwd, command.op.name, parsed.server);
+          if (!result.ok) return { notice: `Failed: ${result.error}` };
+          mcpConfigRef.current = { ...mcpConfigRef.current, [command.op.name]: parsed.server };
+          logAudit("mcp", undefined, `add ${command.op.name}`);
+          return { notice: `Added MCP server "${command.op.name}" — live on the next turn.` };
+        }
+        return { notice: describeMcp(Object.keys(mcpConfigRef.current)) };
+      }
       case "install": {
         if (command.op.type === "list") return { notice: describeInstalled(cwd) };
         void installPlugin(command.op.arg);

@@ -48,7 +48,11 @@ export const COMMAND_CATALOG: readonly CommandSpec[] = [
   { name: "tasks", summary: "Show the task board" },
   { name: "verify", args: "[id|on|off]", summary: "Run quality gates now, or toggle auto-verify" },
   { name: "route", args: "<prompt>", summary: "Force crew to auto-assign the best agent" },
-  { name: "mcp", summary: "Show configured MCP servers + connection status" },
+  {
+    name: "mcp",
+    args: "[add <name> <cmd|url>]",
+    summary: "Show MCP servers, or add one to .crew/mcp.json",
+  },
   {
     name: "install",
     args: "<repo> [--global]",

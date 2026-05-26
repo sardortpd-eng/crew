@@ -30,7 +30,14 @@ export type Command =
   | { readonly kind: "view"; readonly mode?: "grid" | "focus" }
   | { readonly kind: "verify"; readonly toggle?: "on" | "off"; readonly id?: string }
   | { readonly kind: "route"; readonly prompt: string }
-  | { readonly kind: "mcp" }
+  | {
+      readonly kind: "mcp";
+      readonly op?: {
+        readonly type: "add";
+        readonly name: string;
+        readonly spec: readonly string[];
+      };
+    }
   | {
       readonly kind: "install";
       readonly op: { readonly type: "add"; readonly arg: string } | { readonly type: "list" };
@@ -101,8 +108,14 @@ export function parseCommand(raw: string): Command {
     case "route":
       if (!args) return { kind: "error", message: "Usage: /route <prompt>" };
       return { kind: "route", prompt: args };
-    case "mcp":
-      return { kind: "mcp" };
+    case "mcp": {
+      if (rest[0]?.toLowerCase() !== "add") return { kind: "mcp" };
+      const [, name, ...spec] = rest;
+      if (!name || spec.length === 0) {
+        return { kind: "error", message: "Usage: /mcp add <name> <command [args…] | url>" };
+      }
+      return { kind: "mcp", op: { type: "add", name, spec } };
+    }
     case "install": {
       const sub = rest[0]?.toLowerCase();
       if (sub === "list" || sub === "ls") return { kind: "install", op: { type: "list" } };

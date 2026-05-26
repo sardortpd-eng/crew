@@ -14,8 +14,13 @@ export type OrchestratorConfig = {
   readonly cwd?: string;
   /** Builds a per-agent permission handler so prompts carry agent context. */
   readonly makeCanUseTool?: (agent: SpawnedAgent) => CanUseTool;
-  /** MCP servers made available to every agent. */
+  /** MCP servers made available to every agent (static fallback). */
   readonly mcpServers?: Readonly<Record<string, McpServerConfig>>;
+  /**
+   * Dynamic MCP servers, read at send time so a `/mcp add` applies on the next
+   * turn (mirrors {@link resolvePlugins}). Falls back to the static `mcpServers`.
+   */
+  readonly resolveMcpServers?: () => Readonly<Record<string, McpServerConfig>>;
   /** Filesystem settings to load (CLAUDE.md, project `.mcp.json`, etc.). */
   readonly settingSources?: readonly SettingSource[];
   /**
@@ -153,9 +158,10 @@ export class Orchestrator {
     const cwd = agent.cwd ?? this.config.cwd; // a worktree, or the shared root
     const plugins = this.config.resolvePlugins?.() ?? [];
     const isLead = preset.name === LEAD_PRESET;
-    // Only the lead gets the crew-control tools; merge them over any config servers.
+    // Only the lead gets the crew-control tools; merge them over the (dynamic) config servers.
+    const configured = this.config.resolveMcpServers?.() ?? this.config.mcpServers ?? {};
     const mcpServers = {
-      ...(this.config.mcpServers ?? {}),
+      ...configured,
       ...(isLead && this.leadServer ? { [LEAD_SERVER_NAME]: this.leadServer } : {}),
     };
     return {
