@@ -95,6 +95,9 @@ In grid view the prompt starts in **nav mode** so the keyboard drives the panes:
 | `/worktrees [on\|off\|list\|clean]` | Isolate each builder in its own git worktree |
 | `/verify [id\|on\|off]` | Run quality gates now, or toggle auto-verify |
 | `/route <prompt>` | Force crew to auto-assign the best agent for a prompt |
+| `/install <repo> [--global]` | Install skills/commands/MCP from a git repo (see below) |
+| `/install list` | List installed plugins + their components |
+| `/uninstall <name>` | Remove an installed plugin |
 | `/stop [id]` | Abort the focused agent's turn (or one by id) |
 | `/remove [id]` | Stop and remove an agent |
 | `/preset` | List available presets |
@@ -313,6 +316,29 @@ projects); project entries win on name conflicts. See `.crew/mcp.example.json`.
 - **`/mcp`** lists configured servers and their live connection status (read from each session's
   init message: `connected` / `failed` / `needs-auth` / `pending`).
 
+### Install from a git repo
+
+Pull skills, slash commands, subagents, hooks, and MCP servers straight from a repo:
+
+```
+/install anthropics/some-skill-pack        # GitHub owner/repo → project (.crew/installed/)
+/install https://gitlab.com/g/plugin.git   # any git URL
+/install owner/repo#v2 --global            # a ref, installed for every project (~/.config/crew/)
+/install list                              # what's installed + each one's components
+/uninstall some-skill-pack
+```
+
+Crew shallow-clones the repo and registers it as a **local plugin** — the SDK's plugin format is a
+superset, so one install covers `commands/`, `skills/<name>/SKILL.md`, `agents/`, `hooks/`, and
+`.mcp.json`. A repo that ships without a `.claude-plugin/plugin.json` gets a minimal one synthesized
+so it still loads. Because each turn rebuilds the agent's options, an install goes **live on the
+next message to any agent** — no respawn. Scope is project by default, `--global` for all projects;
+both are tracked in an `installed.json` registry crew loads at startup.
+
+> Cloning runs no repo code, but a plugin's hooks/MCP **do** run when an agent uses them — the same
+> guardrail hook still blocks destructive shell. Only install repos you trust; crew echoes the source
+> before fetching.
+
 ## Architecture
 
 ```
@@ -344,6 +370,9 @@ src/
 │   ├── routeHeuristics.ts   # pure keyword classifier for prompt routing
 │   ├── guardrails.ts        # pure destructive-command denylist
 │   ├── repoState.ts         # pure: is the repo greenfield? (planner hint)
+│   ├── installSource.ts     # pure: parse /install arg → clonable source
+│   ├── pluginLayout.ts      # pure: classify a cloned dir + synthesize a manifest
+│   ├── installStore.ts      # clone/register/list/remove plugins (injectable git)
 │   ├── sessionStore.ts      # save/restore crew + board (.crew/session.json)
 │   ├── auditLog.ts          # append-only audit trail (.crew/audit.jsonl)
 │   ├── mcpConfig.ts         # load MCP servers + settingSources (.crew/mcp.json)
@@ -387,6 +416,7 @@ bun test               # 100+ unit tests (engine, store, commands, layout, windo
 bun run test:coverage  # with coverage (95%+ on non-UI code)
 bun run typecheck      # tsc --noEmit
 env -u ANTHROPIC_API_KEY bun run smoke      # live end-to-end check vs the real binary
+env -u ANTHROPIC_API_KEY bun run smoke:install  # install a local plugin → confirm the agent loads it
 env -u ANTHROPIC_API_KEY bun run shakedown  # full plan→build→verify→checkpoint dry run in a temp repo
 ```
 

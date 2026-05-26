@@ -4,6 +4,7 @@ import type {
   Options,
   PermissionMode,
   Query,
+  SdkPluginConfig,
   SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
@@ -81,4 +82,11 @@ export type AgentSessionEvents = {
  */
 export type QueryFn = (params: { prompt: string; options?: Options }) => Query;
 
-export type { McpServerConfig, McpServerStatus, Options, PermissionMode, SDKMessage };
+export type {
+  McpServerConfig,
+  McpServerStatus,
+  Options,
+  PermissionMode,
+  SdkPluginConfig,
+  SDKMessage,
+};

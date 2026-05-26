@@ -29,6 +29,11 @@ export type Command =
   | { readonly kind: "verify"; readonly toggle?: "on" | "off"; readonly id?: string }
   | { readonly kind: "route"; readonly prompt: string }
   | { readonly kind: "mcp" }
+  | {
+      readonly kind: "install";
+      readonly op: { readonly type: "add"; readonly arg: string } | { readonly type: "list" };
+    }
+  | { readonly kind: "uninstall"; readonly name: string }
   | { readonly kind: "mode"; readonly mode?: SafetyMode }
   | { readonly kind: "checkpoint"; readonly label?: string }
   | { readonly kind: "undo" }
@@ -94,6 +99,22 @@ export function parseCommand(raw: string): Command {
       return { kind: "route", prompt: args };
     case "mcp":
       return { kind: "mcp" };
+    case "install": {
+      const sub = rest[0]?.toLowerCase();
+      if (sub === "list" || sub === "ls") return { kind: "install", op: { type: "list" } };
+      if (!args) {
+        return {
+          kind: "error",
+          message: "Usage: /install <owner/repo | git-url> [--global]  ·  /install list",
+        };
+      }
+      return { kind: "install", op: { type: "add", arg: args } };
+    }
+    case "uninstall": {
+      const name = rest[0];
+      if (!name) return { kind: "error", message: "Usage: /uninstall <name>" };
+      return { kind: "uninstall", name };
+    }
     case "mode": {
       const arg = rest[0]?.toLowerCase();
       if (!arg) return { kind: "mode" }; // cycle
@@ -230,6 +251,9 @@ export const HELP_TEXT = [
   "/verify [id|on|off]      run quality gates now, or toggle auto-verify",
   "/route <prompt>          force crew to auto-assign an agent for a prompt",
   "/mcp                     show configured MCP servers + connection status",
+  "/install <repo> [--global]  install skills/commands/MCP from a git repo",
+  "/install list            list installed plugins + their components",
+  "/uninstall <name>        remove an installed plugin",
   "/mode [normal|plan|auto-edit|bypass]   set the safety mode (Shift+Tab cycles)",
   "/checkpoint [label]      commit a git checkpoint now",
   "/undo                    roll back the last checkpoint",

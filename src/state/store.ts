@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { InstalledPlugin } from "../lib/installStore.ts";
 import type {
   AccountInfo,
   AgentStatus,
@@ -114,6 +115,8 @@ type StoreState = {
   readonly tasks: readonly Task[];
   /** Whether builder agents are isolated into their own git worktrees. */
   readonly worktreesOn: boolean;
+  /** Plugins installed from git repos, loaded into every agent's options. */
+  readonly installedPlugins: readonly InstalledPlugin[];
 
   addAgent: (id: string, presetName: string) => void;
   removeAgent: (id: string) => void;
@@ -153,6 +156,7 @@ type StoreState = {
   setTasks: (tasks: readonly Task[]) => void;
   clearTasks: () => void;
   setWorktreesOn: (on: boolean) => void;
+  setInstalledPlugins: (plugins: readonly InstalledPlugin[]) => void;
 };
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -176,6 +180,7 @@ export const useStore = create<StoreState>((set, get) => ({
   sessionBudgetUsd: null,
   tasks: [],
   worktreesOn: false,
+  installedPlugins: [],
 
   addAgent: (id, presetName) =>
     set((s) => ({
@@ -344,6 +349,8 @@ export const useStore = create<StoreState>((set, get) => ({
   clearTasks: () => set({ tasks: [] }),
 
   setWorktreesOn: (on) => set({ worktreesOn: on }),
+
+  setInstalledPlugins: (plugins) => set({ installedPlugins: [...plugins] }),
 }));
 
 type Messages = Readonly<Record<string, readonly Message[]>>;

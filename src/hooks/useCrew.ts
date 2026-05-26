@@ -19,6 +19,8 @@ import { HELP_TEXT, parseCommand } from "../lib/commands.ts";
 import { runGate } from "../engine/verifier.ts";
 import { appendAudit, readAudit } from "../lib/auditLog.ts";
 import { loadMcpConfig } from "../lib/mcpConfig.ts";
+import { parseInstallArg } from "../lib/installSource.ts";
+import { installFromGit, listInstalled, removeInstalled } from "../lib/installStore.ts";
 import { loadShipConfig } from "../lib/projectGates.ts";
 import { isGreenfield } from "../lib/repoState.ts";
 import { aggregateTotals } from "../lib/headerStats.ts";
@@ -58,7 +60,13 @@ export function useCrew(cwd: string) {
   if (orchestratorRef.current === null) {
     const mcp = loadMcpConfig(cwd);
     mcpServersRef.current = Object.keys(mcp.mcpServers);
-    startupNoticeRef.current = joinNotices(loadStartupPresets(cwd), mcpStartupNotice(mcp));
+    const installed = listInstalled(cwd);
+    useStore.getState().setInstalledPlugins(installed);
+    startupNoticeRef.current = joinNotices(
+      loadStartupPresets(cwd),
+      mcpStartupNotice(mcp),
+      installedStartupNotice(installed),
+    );
     orchestratorRef.current = new Orchestrator({
       queryFn: query,
       cwd,
@@ -73,6 +81,9 @@ export function useCrew(cwd: string) {
         const usd = useStore.getState().perTurnBudgetUsd;
         return usd ? { maxBudgetUsd: usd } : {};
       },
+      // Installed plugins go live on the next turn (each turn is a fresh query).
+      resolvePlugins: () =>
+        useStore.getState().installedPlugins.map((p) => ({ type: "local", path: p.path })),
       makeCanUseTool: (agent) =>
         createPermissionHandler({
           allowedTools: [], // preset allowlist is enforced by the SDK; gate the rest
@@ -469,6 +480,33 @@ export function useCrew(cwd: string) {
     return agents.find((a) => a.id === target)?.id;
   }
 
+  /**
+   * Clones a repo as a local plugin and registers it. Progress + outcome land
+   * in the router status line; the plugin is live on the next message to any
+   * agent (options are rebuilt per turn).
+   */
+  async function installPlugin(arg: string): Promise<void> {
+    const setStatus = useStore.getState().setRouterStatus;
+    const parsed = parseInstallArg(arg);
+    if ("error" in parsed) {
+      setStatus(parsed.error);
+      return;
+    }
+    setStatus(`Installing ${parsed.name} from ${parsed.url}…`);
+    const result = await installFromGit(parsed, { cwd });
+    if (!result.ok) {
+      logAudit("install", undefined, `fail ${parsed.name}: ${result.error}`);
+      useStore.getState().setRouterStatus(`Install failed: ${result.error}`);
+      return;
+    }
+    useStore.getState().setInstalledPlugins(listInstalled(cwd));
+    const components = result.plugin.components.join(", ");
+    logAudit("install", undefined, `${parsed.name} [${parsed.scope}] ${components}`);
+    useStore
+      .getState()
+      .setRouterStatus(`Installed ${parsed.name} (${components}) — live on the next message.`);
+  }
+
   function handleInput(raw: string): InputResult {
     const command = parseCommand(raw);
     switch (command.kind) {
@@ -488,6 +526,18 @@ export function useCrew(cwd: string) {
         return {};
       case "mcp":
         return { notice: describeMcp(mcpServersRef.current) };
+      case "install": {
+        if (command.op.type === "list") return { notice: describeInstalled(cwd) };
+        void installPlugin(command.op.arg);
+        return {};
+      }
+      case "uninstall": {
+        const result = removeInstalled(command.name, cwd);
+        if (!result.ok) return { notice: result.error };
+        useStore.getState().setInstalledPlugins(listInstalled(cwd));
+        logAudit("uninstall", undefined, command.name);
+        return { notice: `Uninstalled ${command.name} — new agent turns won't load it.` };
+      }
       case "mode": {
         const store = useStore.getState();
         if (command.mode) store.setSafetyMode(command.mode);
@@ -664,6 +714,24 @@ function describeAudit(cwd: string): string {
     return `  ${time} ${e.kind}${who}${e.detail ? ` · ${e.detail}` : ""}`;
   });
   return ["Audit trail (.crew/audit.jsonl):", ...lines].join("\n");
+}
+
+/** Renders `/install list`: installed plugins + their components. */
+function describeInstalled(cwd: string): string {
+  const list = listInstalled(cwd);
+  if (list.length === 0) {
+    return "No plugins installed. /install <owner/repo> [--global] to add one.";
+  }
+  const lines = list.map(
+    (p) => `  ${p.name} [${p.scope}] — ${p.components.join(", ") || "plugin"}`,
+  );
+  return ["Installed plugins (loaded into every agent):", ...lines].join("\n");
+}
+
+/** Startup notice for installed plugins. */
+function installedStartupNotice(installed: ReturnType<typeof listInstalled>): string | undefined {
+  if (installed.length === 0) return undefined;
+  return `Loaded ${installed.length} installed plugin(s): ${installed.map((p) => p.name).join(", ")}.`;
 }
 
 /** Renders `/tasks`: the board as a checklist. */

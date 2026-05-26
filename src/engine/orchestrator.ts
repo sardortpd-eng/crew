@@ -3,7 +3,7 @@ import { AgentSession } from "./agentSession.ts";
 import { subscriptionEnv } from "./env.ts";
 import { createGuardrailHooks } from "./guardrailHook.ts";
 import type { Preset } from "./presets.ts";
-import type { McpServerConfig, Options, QueryFn } from "./types.ts";
+import type { McpServerConfig, Options, QueryFn, SdkPluginConfig } from "./types.ts";
 
 export type OrchestratorConfig = {
   readonly queryFn: QueryFn;
@@ -22,6 +22,12 @@ export type OrchestratorConfig = {
   readonly resolvePermissionMode?: () => PermissionMode | undefined;
   /** Per-turn budget caps (USD / turns), read at send time. */
   readonly resolveBudget?: () => { maxBudgetUsd?: number; maxTurns?: number };
+  /**
+   * Local plugins (installed from git) made available to every agent. Read at
+   * send time so a freshly-installed plugin applies on the next turn — no
+   * respawn — since each turn builds a fresh `query()` with `resume`.
+   */
+  readonly resolvePlugins?: () => readonly SdkPluginConfig[];
 };
 
 /**
@@ -129,6 +135,7 @@ export class Orchestrator {
     // The session-wide safety toggle overrides the preset's mode when set.
     const permissionMode = this.config.resolvePermissionMode?.() ?? preset.permissionMode;
     const cwd = agent.cwd ?? this.config.cwd; // a worktree, or the shared root
+    const plugins = this.config.resolvePlugins?.() ?? [];
     return {
       model: preset.model,
       systemPrompt: preset.systemPrompt,
@@ -145,6 +152,7 @@ export class Orchestrator {
         ? { mcpServers: { ...this.config.mcpServers } }
         : {}),
       ...(this.config.settingSources ? { settingSources: [...this.config.settingSources] } : {}),
+      ...(plugins.length > 0 ? { plugins: [...plugins] } : {}),
       // Force subscription OAuth: never let a stray API key route to metered
       // billing. process.env minus ANTHROPIC_API_KEY.
       env: subscriptionEnv(),
