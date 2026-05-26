@@ -90,8 +90,11 @@ export function useCrew(cwd: string) {
         const mode = useStore.getState().safetyMode;
         return mode === "normal" ? undefined : mode;
       },
-      // Session-wide model override (null → each preset keeps its own model).
-      resolveModel: () => useStore.getState().modelOverride ?? undefined,
+      // Per-agent override wins over the session-wide one (null → preset's model).
+      resolveModel: (id) => {
+        const s = useStore.getState();
+        return s.modelOverrideByAgent[id] ?? s.modelOverride ?? undefined;
+      },
       resolveBudget: () => {
         const usd = useStore.getState().perTurnBudgetUsd;
         return usd ? { maxBudgetUsd: usd } : {};
@@ -685,17 +688,25 @@ export function useCrew(cwd: string) {
       case "model": {
         const store = useStore.getState();
         if (!command.choice) {
-          const cur = store.modelOverride;
-          return {
-            notice: cur ? `Model: ${cur} (all agents)` : "Model: per-preset (no override).",
-          };
+          const cur = store.modelOverride ? `all: ${store.modelOverride}` : "all: per-preset";
+          const per = Object.entries(store.modelOverrideByAgent).map(([id, m]) => `${id}: ${m}`);
+          return { notice: ["Model —", cur, ...per].join(" · ") };
         }
         const next = command.choice === "default" ? null : command.choice;
+        if (command.agentId) {
+          const id = resolveId(command.agentId);
+          if (!id) return { notice: `No agent matching "${command.agentId}".` };
+          store.setModelOverride(next, id);
+          logAudit("model", id, next ?? "default");
+          return {
+            notice: next ? `${id} → ${next} on its next turn.` : `${id} model override cleared.`,
+          };
+        }
         store.setModelOverride(next);
         logAudit("model", undefined, next ?? "default");
         return {
           notice: next
-            ? `Model: ${next} — every agent uses it on its next turn.`
+            ? `Model: ${next} — every agent (next turn); per-agent overrides still win.`
             : "Model override cleared — agents use their preset's model.",
         };
       }

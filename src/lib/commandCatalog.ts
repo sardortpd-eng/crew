@@ -31,8 +31,8 @@ export const COMMAND_CATALOG: readonly CommandSpec[] = [
   },
   {
     name: "model",
-    args: "[opus|sonnet|haiku|default]",
-    summary: "Override the model for every agent (default = per-preset)",
+    args: "[opus|sonnet|haiku|default] [agentId]",
+    summary: "Override the model for every agent, or one agent (default = per-preset)",
   },
   { name: "checkpoint", args: "[label]", summary: "Commit a git checkpoint now", aliases: ["cp"] },
   { name: "undo", summary: "Roll back the last checkpoint" },

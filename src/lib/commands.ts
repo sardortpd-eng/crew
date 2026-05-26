@@ -47,7 +47,11 @@ export type Command =
     }
   | { readonly kind: "uninstall"; readonly name: string }
   | { readonly kind: "mode"; readonly mode?: SafetyMode }
-  | { readonly kind: "model"; readonly choice?: PresetModel | "default" }
+  | {
+      readonly kind: "model";
+      readonly choice?: PresetModel | "default";
+      readonly agentId?: string;
+    }
   | { readonly kind: "checkpoint"; readonly label?: string }
   | { readonly kind: "undo" }
   | { readonly kind: "diff" }
@@ -141,13 +145,14 @@ export function parseCommand(raw: string): Command {
     case "model": {
       const arg = rest[0]?.toLowerCase();
       if (!arg) return { kind: "model" }; // show current
+      const target = rest[1] ? { agentId: rest[1] } : {}; // optional agent (keep case for id match)
       if (arg === "default" || arg === "reset" || arg === "off") {
-        return { kind: "model", choice: "default" };
+        return { kind: "model", choice: "default", ...target };
       }
       if ((PRESET_MODELS as readonly string[]).includes(arg)) {
-        return { kind: "model", choice: arg as PresetModel };
+        return { kind: "model", choice: arg as PresetModel, ...target };
       }
-      return { kind: "error", message: "Usage: /model [opus|sonnet|haiku|default]" };
+      return { kind: "error", message: "Usage: /model [opus|sonnet|haiku|default] [agentId]" };
     }
     case "mode": {
       const arg = rest[0]?.toLowerCase();

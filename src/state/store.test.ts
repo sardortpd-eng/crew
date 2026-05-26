@@ -25,6 +25,7 @@ const reset = () =>
     worktreesOn: false,
     installedPlugins: [],
     modelOverride: null,
+    modelOverrideByAgent: {},
   });
 
 const s = () => useStore.getState();
@@ -271,6 +272,21 @@ describe("store", () => {
     expect(s().modelOverride).toBe("opus");
     s().setModelOverride(null);
     expect(s().modelOverride).toBeNull();
+  });
+
+  test("setModelOverride with an agentId sets/clears a per-agent override", () => {
+    s().setModelOverride("haiku", "coder-1");
+    expect(s().modelOverrideByAgent["coder-1"]).toBe("haiku");
+    expect(s().modelOverride).toBeNull(); // global untouched
+    s().setModelOverride(null, "coder-1");
+    expect(s().modelOverrideByAgent["coder-1"]).toBeUndefined();
+  });
+
+  test("removeAgent clears that agent's model override", () => {
+    s().addAgent("coder-1", "coder");
+    s().setModelOverride("opus", "coder-1");
+    s().removeAgent("coder-1");
+    expect(s().modelOverrideByAgent["coder-1"]).toBeUndefined();
   });
 
   test("removeAgent clears scroll and stats too", () => {

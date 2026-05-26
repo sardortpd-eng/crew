@@ -33,4 +33,24 @@ describe("/model parsing", () => {
   test("an unknown model is an error", () => {
     expect(parseCommand("/model gpt-9").kind).toBe("error");
   });
+
+  test("an optional agent id targets one agent", () => {
+    const cmd = parseCommand("/model haiku coder-2");
+    if (cmd.kind === "model") {
+      expect(cmd.choice).toBe("haiku");
+      expect(cmd.agentId).toBe("coder-2");
+    } else {
+      throw new Error("expected model");
+    }
+  });
+
+  test("/model default <agent> clears one agent", () => {
+    const cmd = parseCommand("/model default coder-2");
+    if (cmd.kind === "model") {
+      expect(cmd.choice).toBe("default");
+      expect(cmd.agentId).toBe("coder-2");
+    } else {
+      throw new Error("expected model");
+    }
+  });
 });

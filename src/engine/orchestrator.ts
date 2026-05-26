@@ -30,10 +30,11 @@ export type OrchestratorConfig = {
    */
   readonly resolvePermissionMode?: () => PermissionMode | undefined;
   /**
-   * Session-wide model override. Returns undefined to use each preset's own
-   * model. Read at send time so it always reflects the current toggle.
+   * Model override for an agent. Returns undefined to use the preset's own
+   * model. Read at send time; the agent id lets callers apply a per-agent
+   * override over the session-wide one.
    */
-  readonly resolveModel?: () => string | undefined;
+  readonly resolveModel?: (agentId: string) => string | undefined;
   /** Per-turn budget caps (USD / turns), read at send time. */
   readonly resolveBudget?: () => { maxBudgetUsd?: number; maxTurns?: number };
   /**
@@ -165,8 +166,8 @@ export class Orchestrator {
       ...(isLead && this.leadServer ? { [LEAD_SERVER_NAME]: this.leadServer } : {}),
     };
     return {
-      // The session-wide override wins over the preset's own model when set.
-      model: this.config.resolveModel?.() ?? preset.model,
+      // A per-agent / session-wide override wins over the preset's own model.
+      model: this.config.resolveModel?.(agent.id) ?? preset.model,
       systemPrompt: preset.systemPrompt,
       allowedTools: [...preset.allowedTools],
       permissionMode,

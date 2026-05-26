@@ -126,6 +126,8 @@ type StoreState = {
   readonly installedPlugins: readonly InstalledPlugin[];
   /** Session-wide model override; null = each preset uses its own model. */
   readonly modelOverride: PresetModel | null;
+  /** Per-agent model overrides; an entry wins over the session-wide override. */
+  readonly modelOverrideByAgent: Readonly<Record<string, PresetModel>>;
 
   addAgent: (id: string, presetName: string) => void;
   removeAgent: (id: string) => void;
@@ -166,7 +168,8 @@ type StoreState = {
   clearTasks: () => void;
   setWorktreesOn: (on: boolean) => void;
   setInstalledPlugins: (plugins: readonly InstalledPlugin[]) => void;
-  setModelOverride: (model: PresetModel | null) => void;
+  /** Sets/clears the model override globally, or for one agent when `agentId` is given. */
+  setModelOverride: (model: PresetModel | null, agentId?: string) => void;
 };
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -192,6 +195,7 @@ export const useStore = create<StoreState>((set, get) => ({
   worktreesOn: false,
   installedPlugins: [],
   modelOverride: null,
+  modelOverrideByAgent: {},
 
   addAgent: (id, presetName) =>
     set((s) => ({
@@ -207,11 +211,21 @@ export const useStore = create<StoreState>((set, get) => ({
       const { [id]: _scroll, ...scrollOffsets } = s.scrollOffsets;
       const { [id]: _stat, ...stats } = s.stats;
       const { [id]: _v, ...verify } = s.verify;
+      const { [id]: _model, ...modelOverrideByAgent } = s.modelOverrideByAgent;
       const agents = s.agents.filter((a) => a.id !== id);
       const focusedAgentId = s.focusedAgentId === id ? (agents[0]?.id ?? null) : s.focusedAgentId;
       // Drop the router breadcrumb if it referenced the removed agent.
       const routerStatus = s.routerStatus?.includes(id) ? null : s.routerStatus;
-      return { agents, messages, scrollOffsets, stats, verify, focusedAgentId, routerStatus };
+      return {
+        agents,
+        messages,
+        scrollOffsets,
+        stats,
+        verify,
+        modelOverrideByAgent,
+        focusedAgentId,
+        routerStatus,
+      };
     }),
 
   setStatus: (id, status) =>
@@ -363,7 +377,15 @@ export const useStore = create<StoreState>((set, get) => ({
 
   setInstalledPlugins: (plugins) => set({ installedPlugins: [...plugins] }),
 
-  setModelOverride: (model) => set({ modelOverride: model }),
+  setModelOverride: (model, agentId) =>
+    set((s) => {
+      if (!agentId) return { modelOverride: model };
+      if (model === null) {
+        const { [agentId]: _drop, ...rest } = s.modelOverrideByAgent;
+        return { modelOverrideByAgent: rest };
+      }
+      return { modelOverrideByAgent: { ...s.modelOverrideByAgent, [agentId]: model } };
+    }),
 }));
 
 type Messages = Readonly<Record<string, readonly Message[]>>;
