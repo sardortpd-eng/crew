@@ -107,6 +107,15 @@ describe("Orchestrator", () => {
     expect(query.calls[0]?.options?.maxBudgetUsd).toBe(0.5);
   });
 
+  test("setAgentCwd makes the agent run in its own working directory", async () => {
+    const query = makeMockQuery([resultSuccess("ok")]);
+    const orch = new Orchestrator({ queryFn: query, cwd: "/repo" });
+    const agent = orch.spawn(coder());
+    orch.setAgentCwd(agent.id, "/repo/.crew/worktrees/coder-1");
+    await orch.send(agent.id, "x");
+    expect(query.calls[0]?.options?.cwd).toBe("/repo/.crew/worktrees/coder-1");
+  });
+
   test("a guardrail PreToolUse hook is always attached", async () => {
     const query = makeMockQuery([resultSuccess("ok")]);
     const orch = new Orchestrator({ queryFn: query });

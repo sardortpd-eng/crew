@@ -2,6 +2,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { useRef } from "react";
 import { CheckpointController } from "../engine/checkpointController.ts";
 import { Orchestrator, type SpawnedAgent } from "../engine/orchestrator.ts";
+import { WorktreeController } from "../engine/worktrees.ts";
 import { planGoal } from "../engine/planner.ts";
 import {
   getPreset,
@@ -41,6 +42,7 @@ export function useCrew(cwd: string) {
   const orchestratorRef = useRef<Orchestrator | null>(null);
   const verifyRef = useRef<VerifyController | null>(null);
   const checkpointRef = useRef<CheckpointController | null>(null);
+  const worktreeRef = useRef<WorktreeController | null>(null);
   const autoVerifyRef = useRef<boolean>(true);
   const routingRef = useRef<boolean>(false);
   const planRunningRef = useRef<boolean>(false);
@@ -105,6 +107,24 @@ export function useCrew(cwd: string) {
     });
   }
   const checkpoints = checkpointRef.current;
+
+  if (worktreeRef.current === null) {
+    worktreeRef.current = new WorktreeController({ repoRoot: cwd });
+  }
+  const worktrees = worktreeRef.current;
+
+  /** Acquires an isolated worktree for a builder agent on first use (when on). */
+  async function ensureWorktree(id: string): Promise<void> {
+    if (!useStore.getState().worktreesOn) return;
+    if (worktrees.has(id)) return;
+    const agent = orchestrator.get(id);
+    if (!agent || !isBuilderPreset(agent.preset)) return;
+    const path = await worktrees.acquire(id);
+    if (path) {
+      orchestrator.setAgentCwd(id, path);
+      logAudit("worktree", id, `acquired ${path}`);
+    }
+  }
 
   if (verifyRef.current === null) {
     verifyRef.current = new VerifyController({
@@ -188,7 +208,10 @@ export function useCrew(cwd: string) {
   /** Commits a checkpoint after a green turn, labeled with the agent's last task. */
   async function commitOnGreen(agentId: string): Promise<void> {
     const label = lastUserMessage(agentId) ?? "turn";
-    const result = await checkpoints.checkpoint(agentId, label);
+    // A worktree agent checkpoints on its own branch; otherwise the shared crew branch.
+    const result = worktrees.has(agentId)
+      ? await worktrees.checkpoint(agentId, label)
+      : await checkpoints.checkpoint(agentId, label);
     if (result.ok) {
       useStore.getState().setRouterStatus(result.message);
       logAudit("checkpoint", agentId, result.message);
@@ -274,9 +297,12 @@ export function useCrew(cwd: string) {
   function sendTo(id: string, prompt: string): void {
     useStore.getState().addUserMessage(id, prompt);
     logAudit("message", id, prompt);
-    void orchestrator.send(id, prompt).catch((error: unknown) => {
-      useStore.getState().addError(id, error instanceof Error ? error.message : String(error));
-    });
+    void (async () => {
+      await ensureWorktree(id); // isolate builders before their first turn (if enabled)
+      await orchestrator.send(id, prompt).catch((error: unknown) => {
+        useStore.getState().addError(id, error instanceof Error ? error.message : String(error));
+      });
+    })();
   }
 
   function broadcast(task: string): InputResult {
@@ -358,6 +384,7 @@ export function useCrew(cwd: string) {
   async function sendAndSettle(id: string, prompt: string): Promise<void> {
     useStore.getState().addUserMessage(id, prompt);
     logAudit("message", id, prompt);
+    await ensureWorktree(id);
     await orchestrator.send(id, prompt).catch(() => undefined);
     const start = Date.now();
     while (verifier.isVerifying(id) && Date.now() - start < 120_000) {
@@ -438,6 +465,23 @@ export function useCrew(cwd: string) {
       case "ship":
         void ship();
         return { notice: "Shipping…" };
+      case "worktrees": {
+        const action = command.action ?? "list";
+        if (action === "on") {
+          useStore.getState().setWorktreesOn(true);
+          logAudit("worktree", undefined, "enabled");
+          return { notice: "Worktrees on — new builder agents will work in isolation." };
+        }
+        if (action === "off") {
+          useStore.getState().setWorktreesOn(false);
+          return { notice: "Worktrees off — existing ones remain (/worktrees clean to remove)." };
+        }
+        if (action === "clean") {
+          void worktrees.releaseAll();
+          return { notice: "Removing all crew worktrees…" };
+        }
+        return { notice: describeWorktrees(worktrees) };
+      }
       case "checkpoint": {
         const label = command.label ?? "manual checkpoint";
         void checkpoints
@@ -445,12 +489,20 @@ export function useCrew(cwd: string) {
           .then((r) => useStore.getState().setRouterStatus(r.message));
         return {};
       }
-      case "undo":
-        void checkpoints.undo().then((r) => useStore.getState().setRouterStatus(r.message));
+      case "undo": {
+        const focused = useStore.getState().focusedAgentId;
+        const undo =
+          focused && worktrees.has(focused) ? worktrees.undo(focused) : checkpoints.undo();
+        void undo.then((r) => useStore.getState().setRouterStatus(r.message));
         return {};
-      case "diff":
-        void checkpoints.diff().then((text) => useStore.getState().setRouterStatus(text));
+      }
+      case "diff": {
+        const focused = useStore.getState().focusedAgentId;
+        const diff =
+          focused && worktrees.has(focused) ? worktrees.diff(focused) : checkpoints.diff();
+        void diff.then((text) => useStore.getState().setRouterStatus(text));
         return {};
+      }
       case "plan":
         void plan(command.goal);
         return { notice: "Planning…" };
@@ -498,6 +550,7 @@ export function useCrew(cwd: string) {
         const id = resolveId(command.id);
         if (!id) return { notice: "No agent to remove." };
         verifier.remove(id);
+        void worktrees.release(id);
         orchestrator.remove(id);
         useStore.getState().removeAgent(id);
         autoView();
@@ -550,6 +603,17 @@ export function useCrew(cwd: string) {
 }
 
 const TASK_GLYPH: Record<string, string> = { todo: "☐", active: "▶", done: "✓", failed: "✗" };
+
+/** Renders `/worktrees`: active per-agent worktrees + a merge hint. */
+function describeWorktrees(worktrees: WorktreeController): string {
+  const on = useStore.getState().worktreesOn;
+  const list = worktrees.list();
+  if (list.length === 0) {
+    return on ? "Worktrees on — none acquired yet." : "Worktrees off. /worktrees on to enable.";
+  }
+  const lines = list.map((w) => `  ${w.agentId} → ${w.branch} (${w.checkpoints} ckpt)`);
+  return ["Worktrees (merge with `git merge <branch>`):", ...lines].join("\n");
+}
 
 /** Renders `/audit`: the most recent trail entries + the log path. */
 function describeAudit(cwd: string): string {

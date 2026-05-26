@@ -4,6 +4,8 @@ import {
   createBranch,
   isGitRepo,
   resetHard,
+  worktreeAdd,
+  worktreeRemove,
   type GitResult,
   type GitRunner,
 } from "./git.ts";
@@ -55,5 +57,28 @@ describe("git ops", () => {
     const { run, calls } = recorder([ok()]);
     await resetHard("/x", "base999", run);
     expect(calls[0]).toEqual(["reset", "--hard", "base999"]);
+  });
+
+  test("worktreeAdd creates a new branch worktree", async () => {
+    const { run, calls } = recorder([ok()]);
+    expect(await worktreeAdd("/repo", "/repo/.crew/wt/a", "crew/wt-a", run)).toBe(true);
+    expect(calls[0]).toEqual(["worktree", "add", "/repo/.crew/wt/a", "-b", "crew/wt-a"]);
+  });
+
+  test("worktreeAdd retries with the existing branch when -b fails", async () => {
+    const { run, calls } = recorder([fail("already exists"), ok()]);
+    expect(await worktreeAdd("/repo", "/repo/wt/a", "crew/wt-a", run)).toBe(true);
+    expect(calls[1]).toEqual(["worktree", "add", "/repo/wt/a", "crew/wt-a"]);
+  });
+
+  test("worktreeAdd treats an already-existing worktree as reusable", async () => {
+    const { run } = recorder([fail("branch exists"), fail("", "fatal: '/wt/a' already exists")]);
+    expect(await worktreeAdd("/repo", "/wt/a", "crew/wt-a", run)).toBe(true);
+  });
+
+  test("worktreeRemove forces removal", async () => {
+    const { run, calls } = recorder([ok()]);
+    await worktreeRemove("/repo", "/repo/wt/a", run);
+    expect(calls[0]).toEqual(["worktree", "remove", "--force", "/repo/wt/a"]);
   });
 });

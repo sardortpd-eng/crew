@@ -83,3 +83,33 @@ export async function showStat(
   const res = await run(["show", "--stat", "--oneline", ref], cwd);
   return res.ok ? res.stdout : res.stderr || "no diff";
 }
+
+/**
+ * Adds a worktree at `path` on `branch`. Creates the branch (`-b`); if it
+ * already exists, checks it out into the new worktree instead. Returns true if
+ * the worktree exists afterward (including when it was already there).
+ */
+export async function worktreeAdd(
+  repoRoot: string,
+  path: string,
+  branch: string,
+  run: GitRunner = bunGit,
+): Promise<boolean> {
+  const created = await run(["worktree", "add", path, "-b", branch], repoRoot);
+  if (created.ok) return true;
+  // Branch already exists → attach the existing branch to the new worktree.
+  const attached = await run(["worktree", "add", path, branch], repoRoot);
+  if (attached.ok) return true;
+  // The worktree path itself already exists (prior session) → reuse it.
+  return /already (exists|used|checked out)/i.test(`${attached.stdout} ${attached.stderr}`);
+}
+
+/** Removes a worktree (force, to allow uncommitted changes). Keeps the branch. */
+export async function worktreeRemove(
+  repoRoot: string,
+  path: string,
+  run: GitRunner = bunGit,
+): Promise<boolean> {
+  const res = await run(["worktree", "remove", "--force", path], repoRoot);
+  return res.ok;
+}

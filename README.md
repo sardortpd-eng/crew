@@ -91,6 +91,7 @@ In grid view the prompt starts in **nav mode** so the keyboard drives the panes:
 | `/forget` | Clear the saved session for this folder |
 | `/audit` | Show the recent audit trail |
 | `/ship` | Run the configured deploy + health-check gate |
+| `/worktrees [on\|off\|list\|clean]` | Isolate each builder in its own git worktree |
 | `/verify [id\|on\|off]` | Run quality gates now, or toggle auto-verify |
 | `/route <prompt>` | Force crew to auto-assign the best agent for a prompt |
 | `/stop [id]` | Abort the focused agent's turn (or one by id) |
@@ -161,6 +162,21 @@ follow-up question for the reviewer...
 
 Each agent is an independent SDK session, so they stream concurrently. Following up on a
 focused agent resumes its session, so it remembers context.
+
+### Worktree isolation (opt-in)
+
+By default all agents share the working directory, so the task runner is sequential and broadcasting
+to multiple builders isn't safe. Turn on **`/worktrees on`** and each builder agent works in its own
+git worktree (`.crew/worktrees/<agentId>` on branch `crew/wt-<agentId>`):
+
+- Concurrent `/broadcast` and chatting with multiple builders become safe — they can't clobber each
+  other, and the **main working tree stays untouched**.
+- Each agent's commit-on-green checkpoints + `/undo` operate on *its own* branch; `/worktrees list`
+  shows them. Merge an agent's work with `git merge crew/wt-<agentId>`.
+- `/remove` cleans up an agent's worktree (branch kept); `/worktrees clean` removes all. Leftovers are
+  gitignored and `git worktree prune`-able.
+- Off by default; read-only agents always use the main tree. (`/run` stays sequential for now —
+  parallel execution is a follow-on.)
 
 ### Ship & observe
 
@@ -307,6 +323,7 @@ src/
 │   ├── verifyController.ts  # verify + auto-fix loop (serialized queue)
 │   ├── git.ts               # git ops via an injectable runner
 │   ├── checkpointController.ts # commit-on-green checkpoints + /undo
+│   ├── worktrees.ts         # per-agent git worktrees (opt-in isolation)
 │   ├── guardrailHook.ts     # PreToolUse hook blocking destructive shell
 │   ├── planner.ts           # decompose a goal into assigned tasks (LLM)
 │   ├── env.ts               # subscriptionEnv (strips ANTHROPIC_API_KEY)
@@ -348,13 +365,15 @@ sessions and is never duplicated into the store.
 
 ## Roadmap
 
-Toward building production software with only AI. **Done so far:** auto-routing, verify +
-auto-fix, **MCP servers**, a **safety mode** toggle, **git checkpoints** (commit-on-green +
-`/undo`), **guardrails + budgets**, a **planner + task board** (`/plan` → `/run`),
-**session save/resume**, and **ship & observe** (`/audit` trail + `/ship` gate). Next:
+Toward building production software with only AI. **Done:** auto-routing, verify + auto-fix,
+**MCP servers**, a **safety mode** toggle, **git checkpoints** (commit-on-green + `/undo`),
+**guardrails + budgets**, a **planner + task board** (`/plan` → `/run`), **session save/resume**,
+**ship & observe** (`/audit` + `/ship`), and **per-agent worktrees** (opt-in isolation). The core
+loop is complete. Follow-ons:
 
-1. **Per-agent worktrees** — isolate concurrent builders so they can't collide in one tree
-   (then the task runner can go parallel instead of sequential). The last invasive item.
+1. **Parallel `/run`** now that worktrees provide isolation (dispatch tasks concurrently).
+2. **`/merge <agent>`** — merge a worktree branch back into the base branch from inside crew.
+3. **Cross-agent review** — let a reviewer read a builder's worktree via `additionalDirectories`.
 
 ## Development
 

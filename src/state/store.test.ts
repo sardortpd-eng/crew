@@ -21,6 +21,7 @@ const reset = () =>
     checkpoints: [],
     perTurnBudgetUsd: null,
     tasks: [],
+    worktreesOn: false,
   });
 
 const s = () => useStore.getState();

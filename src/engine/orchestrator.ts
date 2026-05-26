@@ -31,6 +31,8 @@ export type SpawnedAgent = {
   readonly id: string;
   readonly preset: Preset;
   readonly session: AgentSession;
+  /** Per-agent working directory (a git worktree); falls back to config.cwd. */
+  cwd?: string;
 };
 
 /**
@@ -88,6 +90,12 @@ export class Orchestrator {
     await Promise.allSettled(runs);
   }
 
+  /** Points an agent at a working directory (e.g. its git worktree). */
+  setAgentCwd(id: string, cwd: string): void {
+    const agent = this.agents.get(id);
+    if (agent) agent.cwd = cwd;
+  }
+
   /** Aborts one agent's in-flight turn. */
   stop(id: string): void {
     this.agents.get(id)?.session.stop();
@@ -120,6 +128,7 @@ export class Orchestrator {
     const { preset } = agent;
     // The session-wide safety toggle overrides the preset's mode when set.
     const permissionMode = this.config.resolvePermissionMode?.() ?? preset.permissionMode;
+    const cwd = agent.cwd ?? this.config.cwd; // a worktree, or the shared root
     return {
       model: preset.model,
       systemPrompt: preset.systemPrompt,
@@ -130,7 +139,7 @@ export class Orchestrator {
       hooks: createGuardrailHooks(),
       ...(this.config.resolveBudget?.() ?? {}),
       includePartialMessages: true,
-      ...(this.config.cwd ? { cwd: this.config.cwd } : {}),
+      ...(cwd ? { cwd } : {}),
       ...(this.config.makeCanUseTool ? { canUseTool: this.config.makeCanUseTool(agent) } : {}),
       ...(this.config.mcpServers && Object.keys(this.config.mcpServers).length > 0
         ? { mcpServers: { ...this.config.mcpServers } }

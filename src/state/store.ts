@@ -110,6 +110,8 @@ type StoreState = {
   /** Per-turn spend cap in USD (null = no cap). */
   readonly perTurnBudgetUsd: number | null;
   readonly tasks: readonly Task[];
+  /** Whether builder agents are isolated into their own git worktrees. */
+  readonly worktreesOn: boolean;
 
   addAgent: (id: string, presetName: string) => void;
   removeAgent: (id: string) => void;
@@ -147,6 +149,7 @@ type StoreState = {
   setTaskStatus: (id: string, status: Task["status"]) => void;
   setTasks: (tasks: readonly Task[]) => void;
   clearTasks: () => void;
+  setWorktreesOn: (on: boolean) => void;
 };
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -168,6 +171,7 @@ export const useStore = create<StoreState>((set, get) => ({
   checkpoints: [],
   perTurnBudgetUsd: null,
   tasks: [],
+  worktreesOn: false,
 
   addAgent: (id, presetName) =>
     set((s) => ({
@@ -332,6 +336,8 @@ export const useStore = create<StoreState>((set, get) => ({
   setTasks: (tasks) => set({ tasks: [...tasks] }),
 
   clearTasks: () => set({ tasks: [] }),
+
+  setWorktreesOn: (on) => set({ worktreesOn: on }),
 }));
 
 type Messages = Readonly<Record<string, readonly Message[]>>;
