@@ -58,7 +58,7 @@ export type Command =
   | { readonly kind: "budget"; readonly scope?: "turn" | "session"; readonly usd?: number | null }
   | { readonly kind: "plan"; readonly goal: string }
   | { readonly kind: "lead"; readonly goal: string }
-  | { readonly kind: "run" }
+  | { readonly kind: "run"; readonly mode?: "parallel" }
   | { readonly kind: "tasks" }
   | { readonly kind: "save" }
   | { readonly kind: "forget" }
@@ -177,8 +177,12 @@ export function parseCommand(raw: string): Command {
     case "lead":
       if (!args) return { kind: "error", message: "Usage: /lead <goal>" };
       return { kind: "lead", goal: args };
-    case "run":
+    case "run": {
+      const mode = rest[0]?.toLowerCase();
+      if (mode === "parallel" || mode === "-p" || mode === "p")
+        return { kind: "run", mode: "parallel" };
       return { kind: "run" };
+    }
     case "tasks":
       return { kind: "tasks" };
     case "save":

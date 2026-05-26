@@ -32,6 +32,7 @@ import {
 } from "../lib/installStore.ts";
 import { loadShipConfig } from "../lib/projectGates.ts";
 import { isGreenfield } from "../lib/repoState.ts";
+import { greenMergeOrder } from "../lib/parallelRun.ts";
 import { aggregateTotals } from "../lib/headerStats.ts";
 import { createPermissionHandler } from "../lib/permissions.ts";
 import { handlePresetOp, loadStartupPresets } from "../lib/presetCommands.ts";
@@ -41,7 +42,7 @@ import {
   saveSession,
   type SessionSnapshot,
 } from "../lib/sessionStore.ts";
-import { useStore } from "../state/store.ts";
+import { type Task, useStore } from "../state/store.ts";
 
 /** Result of handling one input line. */
 export type InputResult = {
@@ -425,6 +426,95 @@ export function useCrew(cwd: string) {
     }
   }
 
+  /**
+   * Runs all todo tasks concurrently, each in its own worktree (isolation is
+   * required, so worktrees are auto-enabled), then merges the green branches
+   * back into the base **in board order**, pausing at the first failed verify
+   * or merge conflict. The unmerged ones stay as worktrees to fix and /merge.
+   */
+  async function runPlanParallel(): Promise<void> {
+    if (planRunningRef.current) return;
+    planRunningRef.current = true;
+    planAbortRef.current = false;
+    try {
+      const cap = useStore.getState().sessionBudgetUsd;
+      if (cap !== null && aggregateTotals(useStore.getState().stats).cost >= cap) {
+        useStore.getState().setRouterStatus(`↳ session budget $${cap.toFixed(2)} reached — paused`);
+        return;
+      }
+      if (!useStore.getState().worktreesOn) {
+        useStore.getState().setWorktreesOn(true);
+        logAudit("worktree", undefined, "enabled (parallel run)");
+      }
+
+      const todo = useStore.getState().tasks.filter((t) => t.status === "todo");
+      if (todo.length === 0) return;
+
+      // Dedicated agent per task; pre-acquire worktrees sequentially to avoid
+      // concurrent `git worktree add` index-lock races, then run concurrently.
+      const assigned = todo.map((task) => {
+        const preset = getPreset(task.preset) ?? getPreset("coder");
+        const id = preset ? createAgent(preset, { focus: false }) : null;
+        if (id) useStore.getState().setTaskStatus(task.id, "active");
+        else useStore.getState().setTaskStatus(task.id, "failed");
+        return { task, id };
+      });
+      const live = assigned.filter((a): a is { task: Task; id: string } => a.id !== null);
+      useStore.getState().setRouterStatus(`↳ running ${live.length} tasks in parallel…`);
+      for (const { id } of live) await ensureWorktree(id);
+      await Promise.allSettled(live.map(({ id, task }) => sendAndSettle(id, task.title)));
+
+      // Score each (verify has settled — sendAndSettle waits on it), then merge.
+      const scored = live.map(({ task, id }) => {
+        const st = useStore.getState();
+        const outcome = taskOutcome(
+          st.agents.find((a) => a.id === id)?.status === "error",
+          st.verify[id]?.status,
+        );
+        st.setTaskStatus(task.id, outcome);
+        return { task, id, outcome };
+      });
+
+      const mergeable = new Set(
+        greenMergeOrder(scored.map((s) => ({ id: s.id, outcome: s.outcome }))),
+      );
+      let merged = 0;
+      let stopped: string | undefined;
+      for (const { task, id } of scored) {
+        if (!mergeable.has(id)) {
+          stopped ??= `${task.title} failed verify`;
+          break;
+        }
+        const branch = worktrees.branchFor(id);
+        if (!branch) {
+          merged += 1; // read-only task, nothing isolated to merge
+          continue;
+        }
+        const m = await merge(cwd, branch);
+        if (!m.ok) {
+          useStore.getState().setTaskStatus(task.id, "failed");
+          stopped = `${task.title} (merge ${m.conflict ? "conflict" : "failed"})`;
+          break;
+        }
+        merged += 1;
+      }
+      logAudit(
+        "plan",
+        undefined,
+        `parallel: ${merged} merged${stopped ? `, stopped: ${stopped}` : ""}`,
+      );
+      useStore
+        .getState()
+        .setRouterStatus(
+          stopped
+            ? `↳ parallel paused: ${stopped} — fix, then /merge or /run`
+            : `↳ parallel run complete · ${merged} branch(es) merged`,
+        );
+    } finally {
+      planRunningRef.current = false;
+    }
+  }
+
   /** Runs the configured deploy (+ health) command — the final ship gate. */
   async function ship(): Promise<void> {
     const { deploy, health } = loadShipConfig(cwd);
@@ -794,11 +884,15 @@ export function useCrew(cwd: string) {
         return { notice: `Lead ${id} is planning & delegating (cap ${MAX_TEAM_AGENTS} agents).` };
       }
       case "run": {
-        if (useStore.getState().tasks.some((t) => t.status === "todo")) {
-          void runPlan();
-          return { notice: "Running task board…" };
+        if (!useStore.getState().tasks.some((t) => t.status === "todo")) {
+          return { notice: "No todo tasks. /plan <goal> first." };
         }
-        return { notice: "No todo tasks. /plan <goal> first." };
+        if (command.mode === "parallel") {
+          void runPlanParallel();
+          return { notice: "Running task board in parallel (isolated worktrees)…" };
+        }
+        void runPlan();
+        return { notice: "Running task board…" };
       }
       case "tasks":
         return { notice: describeTasks() };

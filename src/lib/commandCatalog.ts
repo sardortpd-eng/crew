@@ -44,7 +44,11 @@ export const COMMAND_CATALOG: readonly CommandSpec[] = [
     args: "<goal>",
     summary: "Hand a goal to the lead agent — it hires, delegates, reviews, and integrates",
   },
-  { name: "run", summary: "Run the task board sequentially" },
+  {
+    name: "run",
+    args: "[parallel]",
+    summary: "Run the task board (sequential, or `parallel` in isolated worktrees)",
+  },
   { name: "tasks", summary: "Show the task board" },
   { name: "verify", args: "[id|on|off]", summary: "Run quality gates now, or toggle auto-verify" },
   { name: "route", args: "<prompt>", summary: "Force crew to auto-assign the best agent" },
