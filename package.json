@@ -22,6 +22,7 @@
     "smoke:route": "bun run scripts/smoke-route.ts",
     "smoke:install": "bun run scripts/smoke-install.ts",
     "smoke:lead": "bun run scripts/smoke-lead.ts",
+    "smoke:lead-run": "bun run scripts/smoke-lead-run.ts",
     "shakedown": "bun run scripts/shakedown.ts"
   },
   "dependencies": {

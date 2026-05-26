@@ -84,7 +84,7 @@ shows what each command does, and once you pick one it shows its argument hint (
 | `/focus <id\|number>` | Switch the focused agent |
 | `/view [grid\|focus]` | Switch layout (also `Ctrl+G`) |
 | `/mode [normal\|plan\|auto-edit\|bypass]` | Set the safety mode (Shift+Tab cycles) |
-| `/model [opus\|sonnet\|haiku\|default]` | Override the model for every agent (`default` = per-preset) |
+| `/model [opus\|sonnet\|haiku\|default] [agentId]` | Override the model for every agent, or just one (`default` = per-preset) |
 | `/checkpoint [label]` | Commit a git checkpoint of the working tree now |
 | `/undo` | Roll back the last checkpoint |
 | `/diff` | Show the latest checkpoint's changed files |
@@ -92,7 +92,9 @@ shows what each command does, and once you pick one it shows its argument hint (
 | `/budget total <usd\|off>` | Cap total session spend (pauses `/run` when crossed) |
 | `/lead <goal>` | Hand a goal to the lead agent — it hires, delegates, reviews, integrates |
 | `/plan <goal>` | Break a goal into an assigned task board |
-| `/run` | Run the task board sequentially |
+| `/run [parallel]` | Run the task board — sequential, or `parallel` in isolated worktrees |
+| `/merge <agent>` | Merge a builder's worktree branch back into the base (reports conflicts) |
+| `/review <agent>` | Have the reviewer agent review another agent's changes |
 | `/tasks` | Show the task board |
 | `/save` | Save this crew session to disk |
 | `/forget` | Clear the saved session for this folder |
@@ -103,7 +105,9 @@ shows what each command does, and once you pick one it shows its argument hint (
 | `/route <prompt>` | Force crew to auto-assign the best agent for a prompt |
 | `/install <repo> [--global]` | Install skills/commands/MCP from a git repo (see below) |
 | `/install list` | List installed plugins + their components |
+| `/install update [name]` | Re-pull an installed plugin (or all of them) |
 | `/uninstall <name>` | Remove an installed plugin |
+| `/mcp [add <name> <cmd\|url>]` | Show MCP servers, or add one to `.crew/mcp.json` |
 | `/stop [id]` | Abort the focused agent's turn (or one by id) |
 | `/remove [id]` | Stop and remove an agent |
 | `/preset` | List available presets |
@@ -251,6 +255,11 @@ Hand crew a high-level goal and it plans the work:
   isolates builders, parallel run is a follow-on).
 - `/stop` halts the runner after the current task; `/budget total <usd>` stops it once cumulative
   spend crosses the cap.
+- **`/run parallel`** runs the todo tasks **concurrently**, each in its own git worktree (it
+  auto-enables `/worktrees`), then merges the green branches back into the base **in board order** —
+  pausing at the first failed verify or merge conflict. The unmerged ones stay as worktrees you fix
+  and `/merge <agent>`. **`/review <agent>`** runs the reviewer over another agent's changes; findings
+  land in the reviewer's pane.
 
 ### Verify + auto-fix
 
@@ -398,6 +407,8 @@ src/
 │   ├── routeHeuristics.ts   # pure keyword classifier for prompt routing
 │   ├── guardrails.ts        # pure destructive-command denylist
 │   ├── repoState.ts         # pure: is the repo greenfield? (planner hint)
+│   ├── historyCap.ts        # pure: bound transcript + tool-result history
+│   ├── parallelRun.ts       # pure: which worktree branches merge (board-order green prefix)
 │   ├── installSource.ts     # pure: parse /install arg → clonable source
 │   ├── pluginLayout.ts      # pure: classify a cloned dir + synthesize a manifest
 │   ├── installStore.ts      # clone/register/list/remove plugins (injectable git)
@@ -446,6 +457,7 @@ bun run typecheck      # tsc --noEmit
 env -u ANTHROPIC_API_KEY bun run smoke      # live end-to-end check vs the real binary
 env -u ANTHROPIC_API_KEY bun run smoke:install  # install a local plugin → confirm the agent loads it
 env -u ANTHROPIC_API_KEY bun run smoke:lead     # confirm the lead agent gets its crew-control tools
+env -u ANTHROPIC_API_KEY bun run smoke:lead-run # (paid) one real lead delegation: build + verify a tiny module
 env -u ANTHROPIC_API_KEY bun run shakedown  # full plan→build→verify→checkpoint dry run in a temp repo
 ```
 
