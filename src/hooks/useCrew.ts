@@ -8,10 +8,12 @@ import { planGoal } from "../engine/planner.ts";
 import {
   getPreset,
   isBuilderPreset,
-  listPresets,
+  LEAD_PRESET,
   type Preset,
   presetNames,
+  selectablePresets,
 } from "../engine/presets.ts";
+import { type AssignResult, createLeadServer } from "../engine/leadTools.ts";
 import { routePrompt } from "../engine/router.ts";
 import { taskOutcome } from "../lib/verifyDecision.ts";
 import { VerifyController } from "../engine/verifyController.ts";
@@ -40,6 +42,9 @@ export type InputResult = {
   readonly notice?: string;
 };
 
+/** Cap on how many agents the lead may have on the team at once (bounded autonomy). */
+const MAX_TEAM_AGENTS = 6;
+
 /**
  * Owns the orchestrator for the app's lifetime, wires each spawned agent's
  * session events into the Zustand store, and turns input lines into actions.
@@ -54,6 +59,7 @@ export function useCrew(cwd: string) {
   const planRunningRef = useRef<boolean>(false);
   const planAbortRef = useRef<boolean>(false);
   const restoredRef = useRef<boolean>(false);
+  const leadServerRef = useRef<boolean>(false);
   const mcpServersRef = useRef<readonly string[]>([]);
   const startupNoticeRef = useRef<string | undefined>(undefined);
 
@@ -111,6 +117,14 @@ export function useCrew(cwd: string) {
   }
 
   const orchestrator = orchestratorRef.current;
+
+  // Give the lead agent its crew-control tools (spawn/assign/verify), once.
+  if (!leadServerRef.current) {
+    leadServerRef.current = true;
+    orchestrator.setLeadServer(
+      createLeadServer({ listTeam, assign: assignToSpecialist, verify: verifyForLead }),
+    );
+  }
 
   /** Appends an entry to the project's audit trail (best-effort). */
   function logAudit(kind: string, agentId?: string, detail?: string): void {
@@ -278,12 +292,12 @@ export function useCrew(cwd: string) {
     verifier.enqueue(agent.id);
   }
 
-  /** Spawns + wires + registers + focuses a new agent (no turn started). */
-  function createAgent(preset: Preset): string {
+  /** Spawns + wires + registers a new agent (no turn started). Focuses by default. */
+  function createAgent(preset: Preset, opts: { focus?: boolean } = {}): string {
     const agent = orchestrator.spawn(preset);
     wire(agent);
     useStore.getState().addAgent(agent.id, preset.name);
-    useStore.getState().focus(agent.id);
+    if (opts.focus !== false) useStore.getState().focus(agent.id);
     autoView();
     logAudit("spawn", agent.id, preset.name);
     return agent.id;
@@ -339,7 +353,7 @@ export function useCrew(cwd: string) {
     } catch {
       greenfield = false;
     }
-    const tasks = await planGoal(goal, listPresets(), { queryFn: query, greenfield });
+    const tasks = await planGoal(goal, selectablePresets(), { queryFn: query, greenfield });
     useStore.getState().addTasks(tasks);
     useStore.getState().setRouterStatus(`↳ planned ${tasks.length} task(s) · /run to execute`);
   }
@@ -441,6 +455,79 @@ export function useCrew(cwd: string) {
     }
   }
 
+  // --- Lead orchestration: the crew-control tools the lead agent calls. ---
+
+  /** The specialists the lead may hire + the agents currently on the team. */
+  function listTeam() {
+    const state = useStore.getState();
+    return {
+      presets: selectablePresets().map((p) => ({
+        name: p.preset.name,
+        description: p.preset.description,
+      })),
+      agents: state.agents.map((a) => ({ id: a.id, preset: a.presetName, status: a.status })),
+    };
+  }
+
+  /** Spawn-or-reuse a specialist, run the task to completion, return its output. */
+  async function assignToSpecialist(args: {
+    preset: string;
+    task: string;
+    agentId?: string;
+  }): Promise<AssignResult> {
+    const state = useStore.getState();
+    const cap = state.sessionBudgetUsd;
+    if (cap !== null && aggregateTotals(state.stats).cost >= cap) {
+      return { ok: false, error: `session budget $${cap} reached — stop and report to the user` };
+    }
+
+    let id = args.agentId;
+    if (id) {
+      if (!orchestrator.get(id)) return { ok: false, error: `unknown agent "${id}"` };
+    } else {
+      if (args.preset === LEAD_PRESET)
+        return { ok: false, error: "cannot delegate to another lead" };
+      const preset = getPreset(args.preset);
+      if (!preset) return { ok: false, error: `unknown preset "${args.preset}"` };
+      if (state.agents.length >= MAX_TEAM_AGENTS) {
+        return {
+          ok: false,
+          error: `team is at capacity (${MAX_TEAM_AGENTS}) — reuse an existing agent via agentId`,
+        };
+      }
+      id = createAgent(preset, { focus: false });
+    }
+
+    await sendAndSettle(id, args.task);
+    const { result, errored } = captureResult(id);
+    return { ok: true, agentId: id, result, errored };
+  }
+
+  /** Runs the quality gates on an agent's work and reports pass/fail to the lead. */
+  async function verifyForLead(agentId: string): Promise<{ status: string; gate?: string }> {
+    if (!orchestrator.get(agentId)) return { status: "unknown-agent" };
+    verifier.enqueue(agentId);
+    const start = Date.now();
+    while (verifier.isVerifying(agentId) && Date.now() - start < 180_000) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    const v = useStore.getState().verify[agentId];
+    return v ? { status: v.status, ...(v.gate ? { gate: v.gate } : {}) } : { status: "no-gates" };
+  }
+
+  /** Reads an agent's latest turn output from the store (text + whether it errored). */
+  function captureResult(id: string): { result: string; errored: boolean } {
+    const msgs = useStore.getState().messages[id] ?? [];
+    const lastUser = msgs.map((m) => m.role).lastIndexOf("user");
+    const tail = msgs.slice(lastUser + 1);
+    const errored = tail.some((m) => m.role === "error");
+    const lastText = [...tail]
+      .reverse()
+      .find((m) => m.role === "assistant" && m.text.trim().length > 0);
+    const result = lastText?.role === "assistant" ? lastText.text.trim() : "";
+    return { result: result || (errored ? "(agent errored)" : "(no textual output)"), errored };
+  }
+
   /** Classifies a prompt and assigns it to the best agent (reuse, else spawn). */
   async function route(prompt: string): Promise<void> {
     if (routingRef.current) {
@@ -450,7 +537,7 @@ export function useCrew(cwd: string) {
     routingRef.current = true;
     useStore.getState().setRouterStatus("↳ assigning an agent…");
     try {
-      const decision = await routePrompt(prompt, listPresets(), { queryFn: query });
+      const decision = await routePrompt(prompt, selectablePresets(), { queryFn: query });
       const store = useStore.getState(); // re-read: state may have changed across the await
       const existing = store.agents.find((a) => a.presetName === decision.preset);
       if (existing) {
@@ -611,6 +698,15 @@ export function useCrew(cwd: string) {
       case "plan":
         void plan(command.goal);
         return { notice: "Planning…" };
+      case "lead": {
+        const preset = getPreset(LEAD_PRESET);
+        if (!preset) return { notice: "Lead preset unavailable." };
+        const id = ensureAgent(preset);
+        useStore.getState().focus(id);
+        sendTo(id, command.goal);
+        logAudit("lead", id, command.goal);
+        return { notice: `Lead ${id} is planning & delegating (cap ${MAX_TEAM_AGENTS} agents).` };
+      }
       case "run": {
         if (useStore.getState().tasks.some((t) => t.status === "todo")) {
           void runPlan();

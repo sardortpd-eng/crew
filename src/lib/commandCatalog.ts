@@ -39,6 +39,11 @@ export const COMMAND_CATALOG: readonly CommandSpec[] = [
   { name: "diff", summary: "Show the latest checkpoint's changed files" },
   { name: "budget", args: "[total] <usd|off>", summary: "Cap per-turn (or total) spend" },
   { name: "plan", args: "<goal>", summary: "Break a goal into an assigned task board" },
+  {
+    name: "lead",
+    args: "<goal>",
+    summary: "Hand a goal to the lead agent — it hires, delegates, reviews, and integrates",
+  },
   { name: "run", summary: "Run the task board sequentially" },
   { name: "tasks", summary: "Show the task board" },
   { name: "verify", args: "[id|on|off]", summary: "Run quality gates now, or toggle auto-verify" },

@@ -2,8 +2,12 @@ import type { CanUseTool, PermissionMode, SettingSource } from "@anthropic-ai/cl
 import { AgentSession } from "./agentSession.ts";
 import { subscriptionEnv } from "./env.ts";
 import { createGuardrailHooks } from "./guardrailHook.ts";
-import type { Preset } from "./presets.ts";
+import { LEAD_PRESET, type Preset } from "./presets.ts";
+import { LEAD_SERVER_NAME } from "./leadTools.ts";
 import type { McpServerConfig, Options, QueryFn, SdkPluginConfig } from "./types.ts";
+
+/** A lead's `assign` tool blocks on a whole sub-agent turn; raise the MCP stream timeout. */
+const LEAD_STREAM_TIMEOUT_MS = "600000";
 
 export type OrchestratorConfig = {
   readonly queryFn: QueryFn;
@@ -55,9 +59,16 @@ export class Orchestrator {
   private readonly agents = new Map<string, SpawnedAgent>();
   private readonly config: OrchestratorConfig;
   private counter = 0;
+  /** In-process MCP server giving the lead agent its crew-control tools. */
+  private leadServer?: McpServerConfig;
 
   constructor(config: OrchestratorConfig) {
     this.config = config;
+  }
+
+  /** Installs the lead's control tools; only the lead preset receives them. */
+  setLeadServer(server: McpServerConfig): void {
+    this.leadServer = server;
   }
 
   /** Creates a new agent from a preset. Does not start a turn. */
@@ -141,6 +152,12 @@ export class Orchestrator {
     const permissionMode = this.config.resolvePermissionMode?.() ?? preset.permissionMode;
     const cwd = agent.cwd ?? this.config.cwd; // a worktree, or the shared root
     const plugins = this.config.resolvePlugins?.() ?? [];
+    const isLead = preset.name === LEAD_PRESET;
+    // Only the lead gets the crew-control tools; merge them over any config servers.
+    const mcpServers = {
+      ...(this.config.mcpServers ?? {}),
+      ...(isLead && this.leadServer ? { [LEAD_SERVER_NAME]: this.leadServer } : {}),
+    };
     return {
       // The session-wide override wins over the preset's own model when set.
       model: this.config.resolveModel?.() ?? preset.model,
@@ -154,14 +171,15 @@ export class Orchestrator {
       includePartialMessages: true,
       ...(cwd ? { cwd } : {}),
       ...(this.config.makeCanUseTool ? { canUseTool: this.config.makeCanUseTool(agent) } : {}),
-      ...(this.config.mcpServers && Object.keys(this.config.mcpServers).length > 0
-        ? { mcpServers: { ...this.config.mcpServers } }
-        : {}),
       ...(this.config.settingSources ? { settingSources: [...this.config.settingSources] } : {}),
       ...(plugins.length > 0 ? { plugins: [...plugins] } : {}),
+      ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
       // Force subscription OAuth: never let a stray API key route to metered
-      // billing. process.env minus ANTHROPIC_API_KEY.
-      env: subscriptionEnv(),
+      // billing. process.env minus ANTHROPIC_API_KEY. The lead also needs a
+      // longer MCP stream timeout since its `assign` tool blocks on a sub-agent.
+      env: isLead
+        ? { ...subscriptionEnv(), CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: LEAD_STREAM_TIMEOUT_MS }
+        : subscriptionEnv(),
     };
   }
 

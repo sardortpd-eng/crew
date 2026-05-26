@@ -21,6 +21,7 @@
     "smoke:verify": "bun run scripts/smoke-verify.ts",
     "smoke:route": "bun run scripts/smoke-route.ts",
     "smoke:install": "bun run scripts/smoke-install.ts",
+    "smoke:lead": "bun run scripts/smoke-lead.ts",
     "shakedown": "bun run scripts/shakedown.ts"
   },
   "dependencies": {

@@ -90,6 +90,7 @@ shows what each command does, and once you pick one it shows its argument hint (
 | `/diff` | Show the latest checkpoint's changed files |
 | `/budget [usd\|off]` | Cap per-turn spend (e.g. `/budget 0.50`) |
 | `/budget total <usd\|off>` | Cap total session spend (pauses `/run` when crossed) |
+| `/lead <goal>` | Hand a goal to the lead agent — it hires, delegates, reviews, integrates |
 | `/plan <goal>` | Break a goal into an assigned task board |
 | `/run` | Run the task board sequentially |
 | `/tasks` | Show the task board |
@@ -117,6 +118,7 @@ shows what each command does, and once you pick one it shows its argument hint (
 
 | Preset | Model | Tools | Mode |
 |--------|-------|-------|------|
+| `lead` | opus | Read, Grep, Glob + crew-control tools | default (orchestrator — see below) |
 | `coder` | sonnet | Read, Edit, Write, Bash, Grep, Glob | acceptEdits |
 | `reviewer` | sonnet | Read, Grep, Glob | default (read-only) |
 | `explorer` | haiku | Read, Grep, Glob | default (read-only) |
@@ -210,6 +212,26 @@ the task board — so you can pick up a build across multiple sittings.
 - On launch you'll see `Restored N agent(s) + M task(s)` — message an agent to continue where it
   left off (its context is resumed, though the on-screen transcript starts fresh).
 - `/forget` clears the saved session for the current folder.
+
+### Lead agent (the orchestrator)
+
+`/lead <goal>` hands a whole goal to an **engineering-lead agent** that manages the others like a
+real team. It plans, then uses in-process tools to actually run the crew:
+
+- **`list_team`** — see the specialist roles it can hire and who's already on the team.
+- **`assign`** — hire (or reuse) a specialist and delegate a concrete task; blocks until that agent
+  finishes and returns its output.
+- **`verify`** — run the project's quality gates on an agent's work and decide whether to reassign a fix.
+
+```text
+/lead add JWT auth to the API: middleware, login/refresh endpoints, and tests
+```
+
+It's **bounded-autonomous**: the lead spawns, delegates, and integrates on its own, but it's capped
+at **6 agents**, the **session budget** (`/budget total`) halts it, and every sub-agent's file change
+still goes through the normal approval prompt + guardrails. You watch the whole team work (it
+auto-tiles to grid) and can **Esc/`/stop`** anytime. The lead never edits files itself — it delegates,
+reviews, and reports. (The `lead` preset is excluded from `/route` and `/plan` auto-assignment.)
 
 ### Plan → task board → run
 
@@ -361,6 +383,7 @@ src/
 │   ├── worktrees.ts         # per-agent git worktrees (opt-in isolation)
 │   ├── guardrailHook.ts     # PreToolUse hook blocking destructive shell
 │   ├── planner.ts           # decompose a goal into assigned tasks (LLM)
+│   ├── leadTools.ts         # in-process MCP tools the lead uses to run the crew
 │   ├── env.ts               # subscriptionEnv (strips ANTHROPIC_API_KEY)
 │   ├── types.ts             # shared engine types
 │   └── mockQuery.ts         # injectable mock generator for tests
@@ -422,6 +445,7 @@ bun run test:coverage  # with coverage (95%+ on non-UI code)
 bun run typecheck      # tsc --noEmit
 env -u ANTHROPIC_API_KEY bun run smoke      # live end-to-end check vs the real binary
 env -u ANTHROPIC_API_KEY bun run smoke:install  # install a local plugin → confirm the agent loads it
+env -u ANTHROPIC_API_KEY bun run smoke:lead     # confirm the lead agent gets its crew-control tools
 env -u ANTHROPIC_API_KEY bun run shakedown  # full plan→build→verify→checkpoint dry run in a temp repo
 ```
 

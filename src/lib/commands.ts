@@ -43,6 +43,7 @@ export type Command =
   | { readonly kind: "diff" }
   | { readonly kind: "budget"; readonly scope?: "turn" | "session"; readonly usd?: number | null }
   | { readonly kind: "plan"; readonly goal: string }
+  | { readonly kind: "lead"; readonly goal: string }
   | { readonly kind: "run" }
   | { readonly kind: "tasks" }
   | { readonly kind: "save" }
@@ -148,6 +149,9 @@ export function parseCommand(raw: string): Command {
     case "plan":
       if (!args) return { kind: "error", message: "Usage: /plan <goal>" };
       return { kind: "plan", goal: args };
+    case "lead":
+      if (!args) return { kind: "error", message: "Usage: /lead <goal>" };
+      return { kind: "lead", goal: args };
     case "run":
       return { kind: "run" };
     case "tasks":

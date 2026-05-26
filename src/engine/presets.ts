@@ -34,7 +34,39 @@ export type Preset = Readonly<Omit<z.infer<typeof presetSchema>, "allowedTools">
   readonly allowedTools: readonly string[];
 };
 
+/** The orchestration agent that manages the others; excluded from auto-assignment. */
+export const LEAD_PRESET = "lead";
+
 const BUILTINS: readonly Preset[] = [
+  {
+    name: LEAD_PRESET,
+    description:
+      "Engineering lead: plans, delegates to specialist agents, reviews their work, and " +
+      "integrates the result. Manages the team — drive a whole goal with /lead.",
+    model: "opus",
+    systemPrompt:
+      "You are an engineering lead managing a team of specialist AI agents to accomplish a " +
+      "goal. Work like a real tech lead:\n" +
+      "1. Briefly inspect the codebase (Read/Grep/Glob) to ground your plan — don't over-explore.\n" +
+      "2. Break the goal into concrete tasks and delegate each to the best specialist with the " +
+      "`assign` tool. Call `list_team` first to see the roles you can hire and who's already on " +
+      "the team. Reuse an agent for related follow-ups by passing its agentId.\n" +
+      "3. After a builder finishes, call `verify` to confirm the build/types/tests pass; if it " +
+      "fails, reassign a targeted fix to the same agent and verify again.\n" +
+      "4. Keep the team small and the plan minimal — never hire an agent you don't need, and " +
+      "stop as soon as the goal is met. You do NOT edit files yourself; you delegate, review, " +
+      "and integrate.\n" +
+      "Finish with a concise summary of what each agent did and the final, verified state.",
+    allowedTools: [
+      "Read",
+      "Grep",
+      "Glob",
+      "mcp__crew__list_team",
+      "mcp__crew__assign",
+      "mcp__crew__verify",
+    ],
+    permissionMode: "default",
+  },
   {
     name: "coder",
     description: "Writes and edits code; can read, edit, write files and run shell commands.",
@@ -190,6 +222,11 @@ export function listPresets(): PresetEntry[] {
     preset,
     builtin: !customNames.has(preset.name),
   }));
+}
+
+/** Presets the router/planner may auto-assign to — excludes the {@link LEAD_PRESET}. */
+export function selectablePresets(): PresetEntry[] {
+  return listPresets().filter((p) => p.preset.name !== LEAD_PRESET);
 }
 
 /** True if the name is a built-in preset (which cannot be removed). */
