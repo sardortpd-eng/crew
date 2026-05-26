@@ -23,6 +23,8 @@ const reset = () =>
     sessionBudgetUsd: null,
     tasks: [],
     worktreesOn: false,
+    installedPlugins: [],
+    modelOverride: null,
   });
 
 const s = () => useStore.getState();
@@ -261,6 +263,14 @@ describe("store", () => {
     expect(s().sessionBudgetUsd).toBe(10);
     s().setSessionBudget(null);
     expect(s().sessionBudgetUsd).toBeNull();
+  });
+
+  test("setModelOverride sets/clears the session-wide model", () => {
+    expect(s().modelOverride).toBeNull();
+    s().setModelOverride("opus");
+    expect(s().modelOverride).toBe("opus");
+    s().setModelOverride(null);
+    expect(s().modelOverride).toBeNull();
   });
 
   test("removeAgent clears scroll and stats too", () => {

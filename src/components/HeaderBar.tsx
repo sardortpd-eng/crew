@@ -11,6 +11,7 @@ export function HeaderBar() {
   const account = useStore((s) => s.account);
   const viewMode = useStore((s) => s.viewMode);
   const safetyMode = useStore((s) => s.safetyMode);
+  const modelOverride = useStore((s) => s.modelOverride);
   const branch = useStore((s) => s.checkpointBranch);
   const checkpointCount = useStore((s) => s.checkpoints.length);
   const budget = useStore((s) => s.perTurnBudgetUsd);
@@ -34,6 +35,7 @@ export function HeaderBar() {
         <Text color={safetyColor(safetyMode)} bold={safetyMode === "bypassPermissions"}>
           {safetyLabel(safetyMode)}
         </Text>
+        {modelOverride && <Text dimColor> · ◆ {modelOverride}</Text>}
         {budget !== null && <Text dimColor> · ${budget.toFixed(2)}/turn</Text>}
         {sessionBudget !== null && <Text dimColor> · ${sessionBudget.toFixed(2)} cap</Text>}
         {worktreesOn && <Text dimColor> · ⑃ wt</Text>}

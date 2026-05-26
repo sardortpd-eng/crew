@@ -77,6 +77,8 @@ export function useCrew(cwd: string) {
         const mode = useStore.getState().safetyMode;
         return mode === "normal" ? undefined : mode;
       },
+      // Session-wide model override (null → each preset keeps its own model).
+      resolveModel: () => useStore.getState().modelOverride ?? undefined,
       resolveBudget: () => {
         const usd = useStore.getState().perTurnBudgetUsd;
         return usd ? { maxBudgetUsd: usd } : {};
@@ -545,6 +547,23 @@ export function useCrew(cwd: string) {
         const mode = useStore.getState().safetyMode;
         logAudit("mode", undefined, mode);
         return { notice: `Safety mode: ${mode}` };
+      }
+      case "model": {
+        const store = useStore.getState();
+        if (!command.choice) {
+          const cur = store.modelOverride;
+          return {
+            notice: cur ? `Model: ${cur} (all agents)` : "Model: per-preset (no override).",
+          };
+        }
+        const next = command.choice === "default" ? null : command.choice;
+        store.setModelOverride(next);
+        logAudit("model", undefined, next ?? "default");
+        return {
+          notice: next
+            ? `Model: ${next} — every agent uses it on its next turn.`
+            : "Model override cleared — agents use their preset's model.",
+        };
       }
       case "audit":
         return { notice: describeAudit(cwd) };

@@ -80,6 +80,7 @@ In grid view the prompt starts in **nav mode** so the keyboard drives the panes:
 | `/focus <id\|number>` | Switch the focused agent |
 | `/view [grid\|focus]` | Switch layout (also `Ctrl+G`) |
 | `/mode [normal\|plan\|auto-edit\|bypass]` | Set the safety mode (Shift+Tab cycles) |
+| `/model [opus\|sonnet\|haiku\|default]` | Override the model for every agent (`default` = per-preset) |
 | `/checkpoint [label]` | Commit a git checkpoint of the working tree now |
 | `/undo` | Roll back the last checkpoint |
 | `/diff` | Show the latest checkpoint's changed files |

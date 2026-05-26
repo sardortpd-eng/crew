@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { PresetModel } from "../engine/presets.ts";
 import type { InstalledPlugin } from "../lib/installStore.ts";
 import type {
   AccountInfo,
@@ -117,6 +118,8 @@ type StoreState = {
   readonly worktreesOn: boolean;
   /** Plugins installed from git repos, loaded into every agent's options. */
   readonly installedPlugins: readonly InstalledPlugin[];
+  /** Session-wide model override; null = each preset uses its own model. */
+  readonly modelOverride: PresetModel | null;
 
   addAgent: (id: string, presetName: string) => void;
   removeAgent: (id: string) => void;
@@ -157,6 +160,7 @@ type StoreState = {
   clearTasks: () => void;
   setWorktreesOn: (on: boolean) => void;
   setInstalledPlugins: (plugins: readonly InstalledPlugin[]) => void;
+  setModelOverride: (model: PresetModel | null) => void;
 };
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -181,6 +185,7 @@ export const useStore = create<StoreState>((set, get) => ({
   tasks: [],
   worktreesOn: false,
   installedPlugins: [],
+  modelOverride: null,
 
   addAgent: (id, presetName) =>
     set((s) => ({
@@ -351,6 +356,8 @@ export const useStore = create<StoreState>((set, get) => ({
   setWorktreesOn: (on) => set({ worktreesOn: on }),
 
   setInstalledPlugins: (plugins) => set({ installedPlugins: [...plugins] }),
+
+  setModelOverride: (model) => set({ modelOverride: model }),
 }));
 
 type Messages = Readonly<Record<string, readonly Message[]>>;

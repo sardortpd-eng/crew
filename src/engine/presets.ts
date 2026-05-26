@@ -3,6 +3,9 @@ import { z } from "zod";
 /** Models a preset may target. */
 export const PRESET_MODELS = ["opus", "sonnet", "haiku"] as const;
 
+/** A model alias a preset (or a session-wide override) may target. */
+export type PresetModel = (typeof PRESET_MODELS)[number];
+
 /** Permission modes a preset may request. */
 export const PRESET_MODES = [
   "default",

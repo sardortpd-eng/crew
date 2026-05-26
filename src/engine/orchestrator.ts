@@ -20,6 +20,11 @@ export type OrchestratorConfig = {
    * current toggle.
    */
   readonly resolvePermissionMode?: () => PermissionMode | undefined;
+  /**
+   * Session-wide model override. Returns undefined to use each preset's own
+   * model. Read at send time so it always reflects the current toggle.
+   */
+  readonly resolveModel?: () => string | undefined;
   /** Per-turn budget caps (USD / turns), read at send time. */
   readonly resolveBudget?: () => { maxBudgetUsd?: number; maxTurns?: number };
   /**
@@ -137,7 +142,8 @@ export class Orchestrator {
     const cwd = agent.cwd ?? this.config.cwd; // a worktree, or the shared root
     const plugins = this.config.resolvePlugins?.() ?? [];
     return {
-      model: preset.model,
+      // The session-wide override wins over the preset's own model when set.
+      model: this.config.resolveModel?.() ?? preset.model,
       systemPrompt: preset.systemPrompt,
       allowedTools: [...preset.allowedTools],
       permissionMode,

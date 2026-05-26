@@ -1,3 +1,4 @@
+import { PRESET_MODELS, type PresetModel } from "../engine/presets.ts";
 import type { SafetyMode } from "../state/store.ts";
 
 /** A `/preset` sub-operation. Semantic validation happens in the handler. */
@@ -35,6 +36,7 @@ export type Command =
     }
   | { readonly kind: "uninstall"; readonly name: string }
   | { readonly kind: "mode"; readonly mode?: SafetyMode }
+  | { readonly kind: "model"; readonly choice?: PresetModel | "default" }
   | { readonly kind: "checkpoint"; readonly label?: string }
   | { readonly kind: "undo" }
   | { readonly kind: "diff" }
@@ -114,6 +116,17 @@ export function parseCommand(raw: string): Command {
       const name = rest[0];
       if (!name) return { kind: "error", message: "Usage: /uninstall <name>" };
       return { kind: "uninstall", name };
+    }
+    case "model": {
+      const arg = rest[0]?.toLowerCase();
+      if (!arg) return { kind: "model" }; // show current
+      if (arg === "default" || arg === "reset" || arg === "off") {
+        return { kind: "model", choice: "default" };
+      }
+      if ((PRESET_MODELS as readonly string[]).includes(arg)) {
+        return { kind: "model", choice: arg as PresetModel };
+      }
+      return { kind: "error", message: "Usage: /model [opus|sonnet|haiku|default]" };
     }
     case "mode": {
       const arg = rest[0]?.toLowerCase();
@@ -255,6 +268,7 @@ export const HELP_TEXT = [
   "/install list            list installed plugins + their components",
   "/uninstall <name>        remove an installed plugin",
   "/mode [normal|plan|auto-edit|bypass]   set the safety mode (Shift+Tab cycles)",
+  "/model [opus|sonnet|haiku|default]   override the model for every agent",
   "/checkpoint [label]      commit a git checkpoint now",
   "/undo                    roll back the last checkpoint",
   "/diff                    show the latest checkpoint's changed files",
