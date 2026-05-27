@@ -34,7 +34,12 @@ export const COMMAND_CATALOG: readonly CommandSpec[] = [
     args: "[opus|sonnet|haiku|default] [agentId]",
     summary: "Override the model for every agent, or one agent (default = per-preset)",
   },
-  { name: "checkpoint", args: "[label]", summary: "Commit a git checkpoint now", aliases: ["cp"] },
+  {
+    name: "checkpoint",
+    args: "[label] | auto|ask|off",
+    summary: "Checkpoint now, or set auto-checkpoint mode (default: ask y/n on green)",
+    aliases: ["cp"],
+  },
   { name: "undo", summary: "Roll back the last checkpoint" },
   { name: "diff", summary: "Show the latest checkpoint's changed files" },
   { name: "budget", args: "[total] <usd|off>", summary: "Cap per-turn (or total) spend" },

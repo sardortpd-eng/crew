@@ -33,6 +33,7 @@ import {
 import { loadShipConfig } from "../lib/projectGates.ts";
 import { isGreenfield } from "../lib/repoState.ts";
 import { greenMergeOrder } from "../lib/parallelRun.ts";
+import { checkpointAction } from "../lib/checkpointMode.ts";
 import { aggregateTotals } from "../lib/headerStats.ts";
 import { createPermissionHandler } from "../lib/permissions.ts";
 import { handlePresetOp, loadStartupPresets } from "../lib/presetCommands.ts";
@@ -68,6 +69,9 @@ export function useCrew(cwd: string) {
   const planAbortRef = useRef<boolean>(false);
   const restoredRef = useRef<boolean>(false);
   const leadServerRef = useRef<boolean>(false);
+  // > 0 while an automated batch runs (/run, /lead delegation): suppresses the
+  // interactive checkpoint prompt so a batch doesn't bury the user in y/n.
+  const batchDepthRef = useRef<number>(0);
   const mcpConfigRef = useRef<Record<string, McpServerConfig>>({});
   const startupNoticeRef = useRef<string | undefined>(undefined);
 
@@ -253,9 +257,26 @@ export function useCrew(cwd: string) {
     });
   }
 
-  /** Commits a checkpoint after a green turn, labeled with the agent's last task. */
+  /**
+   * Commits a checkpoint after a green turn. Honors the checkpoint mode: `off`
+   * skips, `auto` commits silently, `ask` prompts y/n on an interactive turn but
+   * commits silently inside an automated batch (`/run`, `/lead`).
+   */
   async function commitOnGreen(agentId: string): Promise<void> {
+    const action = checkpointAction(useStore.getState().checkpointMode, batchDepthRef.current > 0);
+    if (action === "skip") return;
     const label = lastUserMessage(agentId) ?? "turn";
+    if (action === "ask") {
+      const ok = await requestConfirmation(
+        `Checkpoint "${shortLabel(label)}"?`,
+        `${agentId} → git commit`,
+      );
+      if (!ok) {
+        logAudit("checkpoint", agentId, "declined");
+        useStore.getState().setRouterStatus("↳ checkpoint skipped (work left uncommitted)");
+        return;
+      }
+    }
     // A worktree agent checkpoints on its own branch; otherwise the shared crew branch.
     const result = worktrees.has(agentId)
       ? await worktrees.checkpoint(agentId, label)
@@ -264,6 +285,18 @@ export function useCrew(cwd: string) {
       useStore.getState().setRouterStatus(result.message);
       logAudit("checkpoint", agentId, result.message);
     }
+  }
+
+  /** Pushes a yes/no confirmation onto the queue; resolves when the user answers. */
+  function requestConfirmation(title: string, detail?: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      useStore.getState().addConfirmation({
+        id: `confirm:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`,
+        title,
+        ...(detail ? { detail } : {}),
+        resolve,
+      });
+    });
   }
 
   function lastUserMessage(agentId: string): string | undefined {
@@ -380,6 +413,7 @@ export function useCrew(cwd: string) {
     if (planRunningRef.current) return;
     planRunningRef.current = true;
     planAbortRef.current = false;
+    batchDepthRef.current += 1; // automated batch: checkpoints commit without prompting
     try {
       for (;;) {
         if (planAbortRef.current) break;
@@ -417,6 +451,7 @@ export function useCrew(cwd: string) {
       }
     } finally {
       planRunningRef.current = false;
+      batchDepthRef.current -= 1;
       const tasks = useStore.getState().tasks;
       const done = tasks.filter((t) => t.status === "done").length;
       const failed = tasks.find((t) => t.status === "failed");
@@ -441,6 +476,7 @@ export function useCrew(cwd: string) {
     if (planRunningRef.current) return;
     planRunningRef.current = true;
     planAbortRef.current = false;
+    batchDepthRef.current += 1; // automated batch: checkpoints commit without prompting
     try {
       const cap = useStore.getState().sessionBudgetUsd;
       if (cap !== null && aggregateTotals(useStore.getState().stats).cost >= cap) {
@@ -517,6 +553,7 @@ export function useCrew(cwd: string) {
         );
     } finally {
       planRunningRef.current = false;
+      batchDepthRef.current -= 1;
     }
   }
 
@@ -604,7 +641,12 @@ export function useCrew(cwd: string) {
       id = createAgent(preset, { focus: false });
     }
 
-    await sendAndSettle(id, args.task);
+    batchDepthRef.current += 1; // lead-driven turn: checkpoint without prompting
+    try {
+      await sendAndSettle(id, args.task);
+    } finally {
+      batchDepthRef.current -= 1;
+    }
     const { result, errored } = captureResult(id);
     return { ok: true, agentId: id, result, errored };
   }
@@ -890,6 +932,17 @@ export function useCrew(cwd: string) {
         return { notice: describeWorktrees(worktrees) };
       }
       case "checkpoint": {
+        if (command.mode) {
+          useStore.getState().setCheckpointMode(command.mode);
+          logAudit("checkpoint", undefined, `mode ${command.mode}`);
+          const detail =
+            command.mode === "ask"
+              ? " — confirms each on green"
+              : command.mode === "auto"
+                ? " — commits silently on green"
+                : " — no auto-checkpoints";
+          return { notice: `Auto-checkpoint: ${command.mode}${detail}` };
+        }
         const label = command.label ?? "manual checkpoint";
         void checkpoints
           .checkpoint(useStore.getState().focusedAgentId ?? "crew", label)
@@ -1074,6 +1127,12 @@ function describeTasks(): string {
   if (tasks.length === 0) return "No tasks. /plan <goal> to create some.";
   const lines = tasks.map((t) => `  ${TASK_GLYPH[t.status] ?? "·"} [${t.preset}] ${t.title}`);
   return ["Task board:", ...lines].join("\n");
+}
+
+/** Trims a checkpoint label to a short, single-line form for the prompt. */
+function shortLabel(text: string): string {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  return oneLine.length > 60 ? `${oneLine.slice(0, 60)}…` : oneLine;
 }
 
 /** Joins non-empty startup notices onto separate lines. */

@@ -7,6 +7,7 @@ const reset = () =>
     messages: {},
     focusedAgentId: null,
     permissionRequests: [],
+    confirmations: [],
     viewMode: "focus",
     viewModeLocked: false,
     scrollOffsets: {},
@@ -26,6 +27,7 @@ const reset = () =>
     installedPlugins: [],
     modelOverride: null,
     modelOverrideByAgent: {},
+    checkpointMode: "ask",
   });
 
 const s = () => useStore.getState();
@@ -280,6 +282,27 @@ describe("store", () => {
     expect(s().modelOverride).toBeNull(); // global untouched
     s().setModelOverride(null, "coder-1");
     expect(s().modelOverrideByAgent["coder-1"]).toBeUndefined();
+  });
+
+  test("setCheckpointMode updates the mode (default is ask)", () => {
+    expect(s().checkpointMode).toBe("ask");
+    s().setCheckpointMode("auto");
+    expect(s().checkpointMode).toBe("auto");
+    s().setCheckpointMode("off");
+    expect(s().checkpointMode).toBe("off");
+  });
+
+  test("addConfirmation/resolveConfirmation calls resolve with the choice and dequeues", () => {
+    let answered: boolean | undefined;
+    s().addConfirmation({ id: "c1", title: "Checkpoint?", resolve: (ok) => (answered = ok) });
+    expect(s().confirmations).toHaveLength(1);
+    s().resolveConfirmation("c1", true);
+    expect(answered).toBe(true);
+    expect(s().confirmations).toHaveLength(0);
+  });
+
+  test("resolveConfirmation on an unknown id is a no-op", () => {
+    expect(() => s().resolveConfirmation("nope", false)).not.toThrow();
   });
 
   test("removeAgent clears that agent's model override", () => {

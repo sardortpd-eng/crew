@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { PresetModel } from "../engine/presets.ts";
+import type { CheckpointMode } from "../lib/checkpointMode.ts";
 import { capMessages, capRecord } from "../lib/historyCap.ts";
 import type { InstalledPlugin } from "../lib/installStore.ts";
 
@@ -98,11 +99,20 @@ export type PermissionRequest = {
   readonly resolve: (allow: boolean) => void;
 };
 
+/** A yes/no confirmation awaiting the user's decision (e.g. an auto-checkpoint). */
+export type ConfirmationRequest = {
+  readonly id: string;
+  readonly title: string;
+  readonly detail?: string;
+  readonly resolve: (ok: boolean) => void;
+};
+
 type StoreState = {
   readonly agents: readonly AgentView[];
   readonly messages: Readonly<Record<string, readonly Message[]>>;
   readonly focusedAgentId: string | null;
   readonly permissionRequests: readonly PermissionRequest[];
+  readonly confirmations: readonly ConfirmationRequest[];
   readonly viewMode: ViewMode;
   readonly viewModeLocked: boolean;
   readonly scrollOffsets: Readonly<Record<string, number>>;
@@ -128,6 +138,8 @@ type StoreState = {
   readonly modelOverride: PresetModel | null;
   /** Per-agent model overrides; an entry wins over the session-wide override. */
   readonly modelOverrideByAgent: Readonly<Record<string, PresetModel>>;
+  /** How auto-checkpoints behave: prompt (`ask`), commit silently (`auto`), or none (`off`). */
+  readonly checkpointMode: CheckpointMode;
 
   addAgent: (id: string, presetName: string) => void;
   removeAgent: (id: string) => void;
@@ -143,6 +155,10 @@ type StoreState = {
 
   addPermissionRequest: (request: PermissionRequest) => void;
   resolvePermission: (requestId: string, allow: boolean) => void;
+
+  addConfirmation: (request: ConfirmationRequest) => void;
+  resolveConfirmation: (requestId: string, ok: boolean) => void;
+  setCheckpointMode: (mode: CheckpointMode) => void;
 
   setViewMode: (mode: ViewMode) => void;
   autoViewMode: (mode: ViewMode) => void;
@@ -177,6 +193,7 @@ export const useStore = create<StoreState>((set, get) => ({
   messages: {},
   focusedAgentId: null,
   permissionRequests: [],
+  confirmations: [],
   viewMode: "focus",
   viewModeLocked: false,
   scrollOffsets: {},
@@ -196,6 +213,7 @@ export const useStore = create<StoreState>((set, get) => ({
   installedPlugins: [],
   modelOverride: null,
   modelOverrideByAgent: {},
+  checkpointMode: "ask",
 
   addAgent: (id, presetName) =>
     set((s) => ({
@@ -286,6 +304,17 @@ export const useStore = create<StoreState>((set, get) => ({
       permissionRequests: s.permissionRequests.filter((r) => r.id !== requestId),
     }));
   },
+
+  addConfirmation: (request) => set((s) => ({ confirmations: [...s.confirmations, request] })),
+
+  resolveConfirmation: (requestId, ok) => {
+    const request = get().confirmations.find((r) => r.id === requestId);
+    if (!request) return;
+    request.resolve(ok);
+    set((s) => ({ confirmations: s.confirmations.filter((r) => r.id !== requestId) }));
+  },
+
+  setCheckpointMode: (mode) => set({ checkpointMode: mode }),
 
   setViewMode: (mode) => set({ viewMode: mode, viewModeLocked: true }),
 

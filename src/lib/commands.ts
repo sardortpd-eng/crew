@@ -1,5 +1,6 @@
 import { PRESET_MODELS, type PresetModel } from "../engine/presets.ts";
 import type { SafetyMode } from "../state/store.ts";
+import { type CheckpointMode, isCheckpointMode } from "./checkpointMode.ts";
 import { buildHelpText } from "./commandCatalog.ts";
 
 /** A `/preset` sub-operation. Semantic validation happens in the handler. */
@@ -52,7 +53,7 @@ export type Command =
       readonly choice?: PresetModel | "default";
       readonly agentId?: string;
     }
-  | { readonly kind: "checkpoint"; readonly label?: string }
+  | { readonly kind: "checkpoint"; readonly label?: string; readonly mode?: CheckpointMode }
   | { readonly kind: "undo" }
   | { readonly kind: "diff" }
   | { readonly kind: "budget"; readonly scope?: "turn" | "session"; readonly usd?: number | null }
@@ -166,8 +167,11 @@ export function parseCommand(raw: string): Command {
       return { kind: "mode", mode };
     }
     case "checkpoint":
-    case "cp":
+    case "cp": {
+      const first = rest[0]?.toLowerCase();
+      if (first && isCheckpointMode(first)) return { kind: "checkpoint", mode: first };
       return args ? { kind: "checkpoint", label: args } : { kind: "checkpoint" };
+    }
     case "undo":
       return { kind: "undo" };
     case "diff":

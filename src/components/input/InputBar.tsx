@@ -32,8 +32,12 @@ export function InputBar({
   const [selected, setSelected] = useState(0);
   const pending = useStore((s) => s.permissionRequests[0]);
   const resolvePermission = useStore((s) => s.resolvePermission);
+  const pendingConfirm = useStore((s) => s.confirmations[0]);
+  const resolveConfirmation = useStore((s) => s.resolveConfirmation);
+  // A pending prompt (permission or confirmation) takes over the input.
+  const prompting = Boolean(pending || pendingConfirm);
 
-  const suggestion = active && !pending ? suggestCommands(value) : { mode: "none" as const };
+  const suggestion = active && !prompting ? suggestCommands(value) : { mode: "none" as const };
   const menuOpen = suggestion.mode === "list";
   const matches = suggestion.mode === "list" ? suggestion.matches : [];
   const query = suggestion.mode === "list" ? suggestion.query : null;
@@ -47,14 +51,21 @@ export function InputBar({
     setSelected(0);
   }, [query]);
 
+  // y/n for whichever prompt is up. A permission takes priority over a
+  // confirmation; Esc declines a confirmation (permissions stay y/n-only).
   useInput(
-    (input) => {
-      if (!pending) return;
-      const key = input.toLowerCase();
-      if (key === "y") resolvePermission(pending.id, true);
-      else if (key === "n") resolvePermission(pending.id, false);
+    (input, key) => {
+      const yes = input.toLowerCase() === "y";
+      const no = input.toLowerCase() === "n";
+      if (pending) {
+        if (yes) resolvePermission(pending.id, true);
+        else if (no) resolvePermission(pending.id, false);
+      } else if (pendingConfirm) {
+        if (yes) resolveConfirmation(pendingConfirm.id, true);
+        else if (no || key.escape) resolveConfirmation(pendingConfirm.id, false);
+      }
     },
-    { isActive: Boolean(pending) },
+    { isActive: prompting },
   );
 
   // Esc clears the whole line (and closes the menu) in one press; on an empty
@@ -75,7 +86,7 @@ export function InputBar({
         if (spec) replaceValue(completeWith(spec));
       }
     },
-    { isActive: active && !pending },
+    { isActive: active && !prompting },
   );
 
   /** Replaces the field contents by remounting TextInput with a new default. */
@@ -120,6 +131,23 @@ export function InputBar({
           <Text dimColor> allow </Text>
           <Text color="red">n</Text>
           <Text dimColor> deny</Text>
+        </Text>
+      </Box>
+    );
+  }
+
+  if (pendingConfirm) {
+    return (
+      <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1}>
+        <Text color={ACCENT} bold>
+          {pendingConfirm.title}
+        </Text>
+        {pendingConfirm.detail && <Text dimColor>{pendingConfirm.detail}</Text>}
+        <Text>
+          <Text color="green">y</Text>
+          <Text dimColor> yes </Text>
+          <Text color="red">n</Text>
+          <Text dimColor> no · Esc skip</Text>
         </Text>
       </Box>
     );

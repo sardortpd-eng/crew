@@ -42,7 +42,8 @@ Then, in the input bar:
 ```
 
 The **lead agent** plans, hires specialists, delegates, verifies, and integrates — you watch the
-team work and every green step is auto-committed as a git checkpoint (`/undo` rolls back). Prefer
+team work and each green step is checkpointed to git (it asks y/n by default; `/checkpoint auto` to
+commit silently, `/undo` to roll back). Prefer
 hands-on instead? `/spawn coder add a /health endpoint`, or just type a request and crew auto-assigns
 an agent. `Shift+Tab` cycles the safety mode; `Esc` interrupts or clears; `/help` lists everything.
 
@@ -107,7 +108,8 @@ shows what each command does, and once you pick one it shows its argument hint (
 | `/view [grid\|focus]` | Switch layout (also `Ctrl+G`) |
 | `/mode [normal\|plan\|auto-edit\|bypass]` | Set the safety mode (Shift+Tab cycles) |
 | `/model [opus\|sonnet\|haiku\|default] [agentId]` | Override the model for every agent, or just one (`default` = per-preset) |
-| `/checkpoint [label]` | Commit a git checkpoint of the working tree now |
+| `/checkpoint [label]` | Commit a git checkpoint now |
+| `/checkpoint auto\|ask\|off` | Auto-checkpoint mode: silent / confirm y/n (default) / none |
 | `/undo` | Roll back the last checkpoint |
 | `/diff` | Show the latest checkpoint's changed files |
 | `/budget [usd\|off]` | Cap per-turn spend (e.g. `/budget 0.50`) |
@@ -323,8 +325,11 @@ So autonomous edits are reversible, crew checkpoints your work with git:
 
 - On the **first** checkpoint, crew creates and switches to a `crew/<timestamp>` branch — your
   working/main branch is never touched. Merge it yourself when you're happy.
-- **Commit-on-green:** after a builder agent's turn passes verify, crew commits the working tree
-  as a checkpoint (`crew(coder-1): <task>`). `/checkpoint [label]` snapshots manually anytime.
+- **Commit-on-green:** after a builder agent's turn passes verify, crew checkpoints the working tree
+  (`crew(coder-1): <task>`). By default this **asks y/n first** (an inline prompt); `/checkpoint auto`
+  commits silently, `/checkpoint off` disables it, `/checkpoint ask` restores the prompt. During
+  automated batches (`/run`, `/lead`) it commits without prompting so you aren't flooded. The header
+  shows `⎘ ask`/`⎘ off` when not on silent `auto`. `/checkpoint [label]` snapshots manually anytime.
 - **`/undo`** hard-resets the tree to the previous checkpoint (then the branch base); **`/diff`**
   shows the latest checkpoint's changed files. The header shows `⎇ crew/… · N ckpt`.
 - Needs a git repo in the working directory; outside one, checkpoints are silently off. Note: a
