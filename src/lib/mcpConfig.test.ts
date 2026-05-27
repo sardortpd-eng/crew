@@ -26,10 +26,10 @@ function writeProject(obj: unknown) {
 }
 
 describe("loadMcpConfig", () => {
-  test("defaults to project setting source and no servers", () => {
+  test("defaults to user+project+local setting sources and no servers", () => {
     const cfg = loadMcpConfig(cwd);
     expect(cfg.mcpServers).toEqual({});
-    expect(cfg.settingSources).toEqual(["project"]);
+    expect(cfg.settingSources).toEqual(["user", "project", "local"]);
     expect(cfg.warnings).toEqual([]);
   });
 
