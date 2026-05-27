@@ -12,13 +12,26 @@ export type ApprovalRequest = {
  */
 export type RequestApproval = (request: ApprovalRequest) => Promise<boolean>;
 
+/** Presents an agent's `AskUserQuestion` and returns the answer (null = dismissed). */
+export type RequestQuestion = (input: Record<string, unknown>) => Promise<string | null>;
+
+/** Presents an `ExitPlanMode` plan for approval (true = exit plan mode & proceed). */
+export type RequestPlanApproval = (input: Record<string, unknown>) => Promise<boolean>;
+
 export type PermissionHandlerConfig = {
   /** Tools that never need approval (the preset allowlist). */
   readonly allowedTools: readonly string[];
   readonly requestApproval: RequestApproval;
+  /** Handles the `AskUserQuestion` tool (shown as a real question, not allow/deny). */
+  readonly requestQuestion?: RequestQuestion;
+  /** Handles the `ExitPlanMode` tool (shown as a plan to approve). */
+  readonly requestPlanApproval?: RequestPlanApproval;
   /** Auto-deny after this long with no decision. Defaults to 60s. */
   readonly timeoutMs?: number;
 };
+
+const ASK_QUESTION_TOOL = "AskUserQuestion";
+const EXIT_PLAN_TOOL = "ExitPlanMode";
 
 /**
  * Builds a `canUseTool` callback. Allowlisted tools pass immediately; anything
@@ -30,6 +43,26 @@ export function createPermissionHandler(config: PermissionHandlerConfig): CanUse
   const allowed = new Set(config.allowedTools);
 
   return async (toolName, input, { signal }): Promise<PermissionResult> => {
+    // Interactive tools get a real prompt, not a generic allow/deny. The answer
+    // is fed back as a deny message (interrupt:false) the agent reads and
+    // continues from — reliable without depending on headless tool execution.
+    if (toolName === ASK_QUESTION_TOOL && config.requestQuestion) {
+      const answer = await config.requestQuestion(input);
+      return answer === null
+        ? { behavior: "deny", message: "User dismissed the question.", interrupt: false }
+        : { behavior: "deny", message: `The user answered: ${answer}`, interrupt: false };
+    }
+    if (toolName === EXIT_PLAN_TOOL && config.requestPlanApproval) {
+      const ok = await config.requestPlanApproval(input);
+      return ok
+        ? { behavior: "allow", updatedInput: input }
+        : {
+            behavior: "deny",
+            message: "Plan not approved — keep refining or ask a clarifying question.",
+            interrupt: false,
+          };
+    }
+
     if (allowed.has(toolName)) {
       return { behavior: "allow", updatedInput: input };
     }

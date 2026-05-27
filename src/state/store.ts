@@ -107,12 +107,23 @@ export type ConfirmationRequest = {
   readonly resolve: (ok: boolean) => void;
 };
 
+/** An agent's question (AskUserQuestion) awaiting the user's answer. */
+export type QuestionRequest = {
+  readonly id: string;
+  readonly agentId: string;
+  readonly prompt: string;
+  readonly options: readonly string[];
+  /** The chosen/typed answer, or null if the user dismisses it. */
+  readonly resolve: (answer: string | null) => void;
+};
+
 type StoreState = {
   readonly agents: readonly AgentView[];
   readonly messages: Readonly<Record<string, readonly Message[]>>;
   readonly focusedAgentId: string | null;
   readonly permissionRequests: readonly PermissionRequest[];
   readonly confirmations: readonly ConfirmationRequest[];
+  readonly questionRequests: readonly QuestionRequest[];
   readonly viewMode: ViewMode;
   readonly viewModeLocked: boolean;
   readonly scrollOffsets: Readonly<Record<string, number>>;
@@ -160,6 +171,9 @@ type StoreState = {
   resolveConfirmation: (requestId: string, ok: boolean) => void;
   setCheckpointMode: (mode: CheckpointMode) => void;
 
+  addQuestion: (request: QuestionRequest) => void;
+  resolveQuestion: (requestId: string, answer: string | null) => void;
+
   setViewMode: (mode: ViewMode) => void;
   autoViewMode: (mode: ViewMode) => void;
   toggleViewMode: () => void;
@@ -194,6 +208,7 @@ export const useStore = create<StoreState>((set, get) => ({
   focusedAgentId: null,
   permissionRequests: [],
   confirmations: [],
+  questionRequests: [],
   viewMode: "focus",
   viewModeLocked: false,
   scrollOffsets: {},
@@ -315,6 +330,15 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   setCheckpointMode: (mode) => set({ checkpointMode: mode }),
+
+  addQuestion: (request) => set((s) => ({ questionRequests: [...s.questionRequests, request] })),
+
+  resolveQuestion: (requestId, answer) => {
+    const request = get().questionRequests.find((r) => r.id === requestId);
+    if (!request) return;
+    request.resolve(answer);
+    set((s) => ({ questionRequests: s.questionRequests.filter((r) => r.id !== requestId) }));
+  },
 
   setViewMode: (mode) => set({ viewMode: mode, viewModeLocked: true }),
 

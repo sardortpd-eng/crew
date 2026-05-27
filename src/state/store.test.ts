@@ -8,6 +8,7 @@ const reset = () =>
     focusedAgentId: null,
     permissionRequests: [],
     confirmations: [],
+    questionRequests: [],
     viewMode: "focus",
     viewModeLocked: false,
     scrollOffsets: {},
@@ -303,6 +304,34 @@ describe("store", () => {
 
   test("resolveConfirmation on an unknown id is a no-op", () => {
     expect(() => s().resolveConfirmation("nope", false)).not.toThrow();
+  });
+
+  test("addQuestion/resolveQuestion calls resolve with the answer and dequeues", () => {
+    let answer: string | null | undefined;
+    s().addQuestion({
+      id: "q1",
+      agentId: "coder-1",
+      prompt: "Which?",
+      options: ["A", "B"],
+      resolve: (a) => (answer = a),
+    });
+    expect(s().questionRequests).toHaveLength(1);
+    s().resolveQuestion("q1", "A");
+    expect(answer).toBe("A");
+    expect(s().questionRequests).toHaveLength(0);
+  });
+
+  test("resolveQuestion can carry a null dismissal", () => {
+    let answer: string | null | undefined = "unset";
+    s().addQuestion({
+      id: "q2",
+      agentId: "x",
+      prompt: "?",
+      options: [],
+      resolve: (a) => (answer = a),
+    });
+    s().resolveQuestion("q2", null);
+    expect(answer).toBeNull();
   });
 
   test("removeAgent clears that agent's model override", () => {

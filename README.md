@@ -342,6 +342,15 @@ So autonomous edits are reversible, crew checkpoints your work with git:
   checkpoint commits *all* current changes in the tree (it's a snapshot), which is why it lives on
   its own branch.
 
+### Interactive tools (questions & plan approval)
+
+When an agent calls **`AskUserQuestion`**, crew shows the real question with numbered options — press
+a number to pick, type a custom answer + Enter, or Esc to skip; your answer is fed back to the agent,
+which continues (no more generic deny that strands it). When an agent in plan mode calls
+**`ExitPlanMode`**, crew shows the plan and asks to approve: **y** exits plan mode and proceeds, **n**
+keeps it planning. Scroll the transcript with **PgUp/PgDn** (or Shift+↑/↓); sending a message snaps
+back to the latest.
+
 ### Permissions
 
 Tools outside a preset's allowlist trigger an inline **allow / deny** prompt

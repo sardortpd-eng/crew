@@ -35,10 +35,16 @@ export function InputBar({
   const resolvePermission = useStore((s) => s.resolvePermission);
   const pendingConfirm = useStore((s) => s.confirmations[0]);
   const resolveConfirmation = useStore((s) => s.resolveConfirmation);
-  // A pending prompt (permission or confirmation) takes over the input.
-  const prompting = Boolean(pending || pendingConfirm);
+  const pendingQuestion = useStore((s) => s.questionRequests[0]);
+  const resolveQuestion = useStore((s) => s.resolveQuestion);
+  // A permission/confirmation takes over the input entirely (y/n only). A
+  // question keeps the field live so the user can also type a custom answer.
+  const hardPrompt = Boolean(pending || pendingConfirm);
+  const questionMode = Boolean(pendingQuestion) && !hardPrompt;
+  const showInput = (active || questionMode) && !hardPrompt;
 
-  const suggestion = active && !prompting ? suggestCommands(value) : { mode: "none" as const };
+  const suggestion =
+    active && !hardPrompt && !questionMode ? suggestCommands(value) : { mode: "none" as const };
   const menuOpen = suggestion.mode === "list";
   const matches = suggestion.mode === "list" ? suggestion.matches : [];
   const query = suggestion.mode === "list" ? suggestion.query : null;
@@ -66,12 +72,32 @@ export function InputBar({
         else if (no || key.escape) resolveConfirmation(pendingConfirm.id, false);
       }
     },
-    { isActive: prompting },
+    { isActive: hardPrompt },
   );
 
-  // Esc clears the whole line (and closes the menu) in one press; on an empty
-  // line it defers to the caller (interrupt / leave typing mode). Menu nav uses
-  // up/down/tab, which TextInput ignores — so there's no conflict.
+  // Answering an AskUserQuestion: a digit picks an option (when the line is
+  // empty), Esc dismisses; typing + Enter sends a custom answer (handleSubmit).
+  useInput(
+    (input, key) => {
+      if (!pendingQuestion) return;
+      if (key.escape) {
+        resolveQuestion(pendingQuestion.id, null);
+        replaceValue("");
+        return;
+      }
+      if (value.length === 0 && /^[1-9]$/.test(input)) {
+        const option = pendingQuestion.options[Number(input) - 1];
+        if (option) {
+          resolveQuestion(pendingQuestion.id, option);
+          replaceValue("");
+        }
+      }
+    },
+    { isActive: questionMode },
+  );
+
+  // Esc clears the line / scroll keys / menu nav. Scroll (PgUp/PgDn, Shift+↑/↓)
+  // works in focus view too. Up/down/tab are TextInput-ignored, so no conflict.
   useInput(
     (_input, key) => {
       if (key.escape) {
@@ -84,6 +110,14 @@ export function InputBar({
         replaceValue(deleteLastWord(value));
         return;
       }
+      // Scroll the focused transcript (works while typing; TextInput ignores these).
+      const { focusedAgentId, scrollPane } = useStore.getState();
+      if (focusedAgentId) {
+        if (key.pageUp) return scrollPane(focusedAgentId, SCROLL_PAGE);
+        if (key.pageDown) return scrollPane(focusedAgentId, -SCROLL_PAGE);
+        if (key.shift && key.upArrow) return scrollPane(focusedAgentId, 1);
+        if (key.shift && key.downArrow) return scrollPane(focusedAgentId, -1);
+      }
       if (!menuOpen || matches.length === 0) return;
       if (key.downArrow) setSelected((i) => Math.min(matches.length - 1, i + 1));
       else if (key.upArrow) setSelected((i) => Math.max(0, i - 1));
@@ -92,7 +126,7 @@ export function InputBar({
         if (spec) replaceValue(completeWith(spec));
       }
     },
-    { isActive: active && !prompting },
+    { isActive: active && !hardPrompt && !questionMode },
   );
 
   /** Replaces the field contents by remounting TextInput with a new default. */
@@ -108,6 +142,13 @@ export function InputBar({
   }
 
   function handleSubmit(submitted: string): void {
+    // While answering a question, Enter sends a typed custom answer.
+    if (questionMode && pendingQuestion) {
+      const answer = submitted.trim();
+      if (answer.length > 0) resolveQuestion(pendingQuestion.id, answer);
+      replaceValue("");
+      return;
+    }
     // Enter on an incomplete command name (e.g. "/mod") completes the highlighted
     // match instead of running an unknown command. A fully-typed command runs.
     const partial = /^\/(\S*)$/.exec(submitted.trim());
@@ -159,7 +200,7 @@ export function InputBar({
     );
   }
 
-  if (!active) {
+  if (!showInput) {
     return (
       <Box borderStyle="round" borderColor="gray" paddingX={1}>
         <Text dimColor>{"> press "}</Text>
@@ -171,6 +212,26 @@ export function InputBar({
 
   return (
     <Box flexDirection="column">
+      {questionMode && pendingQuestion && (
+        <Box flexDirection="column" borderStyle="round" borderColor={ACCENT} paddingX={1}>
+          <Text color={ACCENT} bold>
+            {pendingQuestion.agentId} asks
+          </Text>
+          {pendingQuestion.prompt.split("\n").map((line, i) => (
+            <Text key={i}>{line}</Text>
+          ))}
+          {pendingQuestion.options.map((opt, i) => (
+            <Text key={opt}>
+              <Text color={ACCENT}>{`  ${i + 1}`}</Text>
+              <Text> {opt}</Text>
+            </Text>
+          ))}
+          <Text dimColor>
+            {pendingQuestion.options.length > 0 ? "press a number, " : ""}
+            type an answer + Enter · Esc skip
+          </Text>
+        </Box>
+      )}
       {menuOpen && <CommandMenu matches={matches} selected={selectedIndex} />}
       {suggestion.mode === "hint" && (
         <Box paddingX={1}>
@@ -183,7 +244,9 @@ export function InputBar({
         <TextInput
           key={resetKey}
           defaultValue={seed}
-          placeholder="Ask, or type / for commands"
+          placeholder={
+            questionMode ? "Type an answer, or press a number" : "Ask, or type / for commands"
+          }
           onChange={handleChange}
           onSubmit={handleSubmit}
         />
@@ -191,6 +254,8 @@ export function InputBar({
     </Box>
   );
 }
+
+const SCROLL_PAGE = 8;
 
 function summarizeInput(input: Record<string, unknown>): string {
   const json = JSON.stringify(input);

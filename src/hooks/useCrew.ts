@@ -34,6 +34,7 @@ import { loadShipConfig } from "../lib/projectGates.ts";
 import { isGreenfield } from "../lib/repoState.ts";
 import { greenMergeOrder } from "../lib/parallelRun.ts";
 import { checkpointAction } from "../lib/checkpointMode.ts";
+import { formatQuestion } from "../lib/askQuestion.ts";
 import { aggregateTotals } from "../lib/headerStats.ts";
 import { createPermissionHandler } from "../lib/permissions.ts";
 import { handlePresetOp, loadStartupPresets } from "../lib/presetCommands.ts";
@@ -128,6 +129,24 @@ export function useCrew(cwd: string) {
                 },
               });
             }),
+          // AskUserQuestion → a real question prompt; the answer is fed back.
+          requestQuestion: (input) =>
+            new Promise<string | null>((resolve) => {
+              const { prompt, options } = formatQuestion(input);
+              useStore.getState().addQuestion({
+                id: `q:${agent.id}:${Date.now()}`,
+                agentId: agent.id,
+                prompt,
+                options,
+                resolve: (answer) => {
+                  logAudit("question", agent.id, answer ?? "dismissed");
+                  resolve(answer);
+                },
+              });
+            }),
+          // ExitPlanMode → approve the plan (reuses the confirmation prompt).
+          requestPlanApproval: (input) =>
+            requestConfirmation("Approve plan & exit plan mode?", planText(input)),
         }),
     });
   }
@@ -381,6 +400,7 @@ export function useCrew(cwd: string) {
 
   function sendTo(id: string, prompt: string): void {
     useStore.getState().addUserMessage(id, prompt);
+    useStore.getState().resetScroll(id); // snap to the tail so the reply is in view
     logAudit("message", id, prompt);
     void (async () => {
       await ensureWorktree(id); // isolate builders before their first turn (if enabled)
@@ -593,6 +613,7 @@ export function useCrew(cwd: string) {
   /** Runs one turn and waits for any follow-on verify to settle (≤2 min). */
   async function sendAndSettle(id: string, prompt: string): Promise<void> {
     useStore.getState().addUserMessage(id, prompt);
+    useStore.getState().resetScroll(id);
     logAudit("message", id, prompt);
     await ensureWorktree(id);
     await orchestrator.send(id, prompt).catch(() => undefined);
@@ -1131,6 +1152,14 @@ function describeTasks(): string {
   if (tasks.length === 0) return "No tasks. /plan <goal> to create some.";
   const lines = tasks.map((t) => `  ${TASK_GLYPH[t.status] ?? "·"} [${t.preset}] ${t.title}`);
   return ["Task board:", ...lines].join("\n");
+}
+
+/** Extracts a readable plan from an ExitPlanMode input (its `plan` field, else JSON). */
+function planText(input: Record<string, unknown>): string {
+  const plan = input.plan;
+  if (typeof plan === "string" && plan.trim().length > 0) return plan.trim();
+  const json = JSON.stringify(input);
+  return json.length > 2 ? json : "(no plan text provided)";
 }
 
 /** Trims a checkpoint label to a short, single-line form for the prompt. */

@@ -69,4 +69,56 @@ describe("createPermissionHandler", () => {
 
     expect(result.behavior).toBe("deny");
   });
+
+  test("AskUserQuestion: the answer is fed back as a deny message (interrupt:false)", async () => {
+    const canUse = createPermissionHandler({
+      allowedTools: [],
+      requestApproval: async () => false,
+      requestQuestion: async () => "Postgres",
+    });
+    const result = await canUse("AskUserQuestion", { questions: [] }, ctx());
+    expect(result.behavior).toBe("deny");
+    if (result.behavior === "deny") {
+      expect(result.message).toContain("Postgres");
+      expect(result.interrupt).toBe(false);
+    }
+  });
+
+  test("AskUserQuestion: a dismissal is a benign deny", async () => {
+    const canUse = createPermissionHandler({
+      allowedTools: [],
+      requestApproval: async () => false,
+      requestQuestion: async () => null,
+    });
+    const result = await canUse("AskUserQuestion", {}, ctx());
+    expect(result.behavior).toBe("deny");
+    if (result.behavior === "deny") expect(result.interrupt).toBe(false);
+  });
+
+  test("ExitPlanMode: approval allows (exits plan mode)", async () => {
+    const canUse = createPermissionHandler({
+      allowedTools: [],
+      requestApproval: async () => false,
+      requestPlanApproval: async () => true,
+    });
+    const result = await canUse("ExitPlanMode", { plan: "do X" }, ctx());
+    expect(result.behavior).toBe("allow");
+  });
+
+  test("ExitPlanMode: rejection denies with guidance (interrupt:false)", async () => {
+    const canUse = createPermissionHandler({
+      allowedTools: [],
+      requestApproval: async () => true,
+      requestPlanApproval: async () => false,
+    });
+    const result = await canUse("ExitPlanMode", { plan: "do X" }, ctx());
+    expect(result.behavior).toBe("deny");
+    if (result.behavior === "deny") expect(result.interrupt).toBe(false);
+  });
+
+  test("without special handlers, these tools fall back to the y/n flow", async () => {
+    const canUse = createPermissionHandler({ allowedTools: [], requestApproval: async () => true });
+    const result = await canUse("AskUserQuestion", {}, ctx());
+    expect(result.behavior).toBe("allow"); // generic approval path
+  });
 });
