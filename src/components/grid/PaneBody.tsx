@@ -45,11 +45,12 @@ export function PaneBody({
 }
 
 function lineColor(kind: LineKind): string | undefined {
-  if (kind === "assistant" || kind === "tool") return ACCENT;
+  if (kind === "tool") return ACCENT; // the ⏺ action bullet stays accent
   if (kind === "error") return "red";
-  return undefined;
+  return undefined; // assistant + user render in the default (bright) foreground
 }
 
 function isDim(kind: LineKind): boolean {
-  return kind === "user" || kind === "toolResult";
+  // Only secondary detail is dimmed; the main prose stays readable.
+  return kind === "toolResult";
 }

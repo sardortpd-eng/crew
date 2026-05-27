@@ -1,7 +1,7 @@
 import type { Message } from "../state/store.ts";
 
 /** Kind of a rendered line, so the renderer can style it. */
-export type LineKind = "user" | "assistant" | "tool" | "toolResult" | "error";
+export type LineKind = "user" | "assistant" | "tool" | "toolResult" | "error" | "separator";
 
 export type RenderLine = { readonly kind: LineKind; readonly text: string };
 
@@ -61,6 +61,8 @@ export function flattenMessages(
 ): RenderLine[] {
   const out: RenderLine[] = [];
   for (const message of messages) {
+    // Blank line between messages so consecutive turns don't run together.
+    if (out.length > 0) out.push({ kind: "separator", text: "" });
     if (message.role === "user") {
       pushWrapped(out, "user", `> ${message.text}`, width);
     } else if (message.role === "error") {

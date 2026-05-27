@@ -1,6 +1,7 @@
 import { Box, Text } from "ink";
 import { useEffect, useState } from "react";
 import type { AgentStatus } from "../engine/types.ts";
+import { formatElapsed } from "../lib/textFormat.ts";
 import { Spinner } from "./Spinner.tsx";
 import { ACCENT, statusLabel } from "./theme.ts";
 
@@ -17,7 +18,7 @@ export function StatusLine({ status }: { status: AgentStatus }) {
     <Box>
       <Spinner color={ACCENT} />
       <Text color={ACCENT}> {statusLabel(status)}…</Text>
-      <Text dimColor> ({seconds}s · esc to interrupt)</Text>
+      <Text dimColor> ({formatElapsed(seconds)} · esc to interrupt)</Text>
     </Box>
   );
 }

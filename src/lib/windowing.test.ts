@@ -49,6 +49,14 @@ describe("flattenMessages", () => {
     expect(lines.find((l) => l.kind === "toolResult")?.text).toContain("3 files");
   });
 
+  test("inserts a blank separator between messages, none before the first", () => {
+    const lines = flattenMessages(messages, 80, {});
+    expect(lines[0]?.kind).not.toBe("separator"); // no leading gap
+    const separators = lines.filter((l) => l.kind === "separator");
+    expect(separators.length).toBe(messages.length - 1); // one between each pair
+    expect(separators.every((l) => l.text === "")).toBe(true);
+  });
+
   test("shows running… when no tool result yet", () => {
     const lines = flattenMessages(messages, 80, {});
     expect(lines.find((l) => l.kind === "toolResult")?.text).toContain("running…");
