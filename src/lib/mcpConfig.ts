@@ -35,8 +35,13 @@ export type McpConfig = {
   readonly warnings: readonly string[];
 };
 
-/** Default: load project settings so CLAUDE.md + project `.mcp.json` apply. */
-const DEFAULT_SETTING_SOURCES: SettingSource[] = ["project"];
+/**
+ * Default: load user + project + local settings — so crew inherits your existing
+ * Claude Code config (global `~/.claude` skills/agents/commands/plugins/MCP, the
+ * project `.claude` + `CLAUDE.md`, and local overrides). Override per project via
+ * `settingSources` in `.crew/mcp.json`.
+ */
+const DEFAULT_SETTING_SOURCES: SettingSource[] = ["user", "project", "local"];
 
 export function userMcpPath(): string {
   const base = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");

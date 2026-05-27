@@ -2,6 +2,8 @@
 import { render } from "ink";
 import { App } from "./components/App.tsx";
 import { LEAVE_ALT_SCREEN } from "./hooks/useAltScreen.ts";
+import { parseLaunchArgs } from "./lib/launchArgs.ts";
+import { useStore } from "./state/store.ts";
 
 /**
  * crew — a TUI for orchestrating multiple Claude agents on your subscription.
@@ -18,6 +20,11 @@ async function main(): Promise<void> {
         "Claude subscription, not metered API credits.\n",
     );
   }
+
+  // Launch flags: --dangerously-skip-permissions / --plan set the starting mode
+  // before render; this wins over a restored session's saved mode.
+  const { safetyMode } = parseLaunchArgs(process.argv.slice(2));
+  if (safetyMode) useStore.getState().setSafetyMode(safetyMode);
 
   // Crash safety: a React crash can't run the alt-screen restore effect, so
   // guarantee the normal screen is restored on any fatal exit.

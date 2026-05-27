@@ -26,6 +26,12 @@ Then run `crew` in any project directory. Or run it locally without linking:
 bun start
 ```
 
+**Launch flags:** `crew --dangerously-skip-permissions` starts in bypass mode (no approval prompts);
+`crew --plan` starts in plan mode. By default crew **loads your existing Claude Code config** — the
+global `~/.claude` skills/agents/commands/plugins/MCP plus the project `.claude` + `CLAUDE.md` — so
+anything you've set up for Claude Code is available to crew's agents. Override per project with
+`settingSources` in `.crew/mcp.json`.
+
 ## Quickstart (first run)
 
 ```bash

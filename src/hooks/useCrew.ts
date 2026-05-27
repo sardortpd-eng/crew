@@ -232,7 +232,11 @@ export function useCrew(cwd: string) {
     }
     if (snap.tasks.length > 0) useStore.getState().setTasks(snap.tasks);
     if (snap.focusedAgentId) useStore.getState().focus(snap.focusedAgentId);
-    if (snap.safetyMode) useStore.getState().setSafetyMode(snap.safetyMode);
+    // Restore the saved mode, but let an explicit launch flag (which already set
+    // a non-normal mode before render) win over it.
+    if (snap.safetyMode && useStore.getState().safetyMode === "normal") {
+      useStore.getState().setSafetyMode(snap.safetyMode);
+    }
     autoView();
 
     if (restored === 0 && snap.tasks.length === 0) return undefined;

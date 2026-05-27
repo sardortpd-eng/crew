@@ -4,6 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addMcpServer, loadMcpConfig, parseServerSpec, projectMcpPath } from "./mcpConfig.ts";
 
+describe("loadMcpConfig defaults", () => {
+  test("loads user + project + local settings by default (no config file)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "crew-mcp-def-"));
+    const prevXdg = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = dir; // isolate from the real ~/.config/crew/mcp.json
+    try {
+      expect(loadMcpConfig(dir).settingSources).toEqual(["user", "project", "local"]);
+    } finally {
+      if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = prevXdg;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("parseServerSpec", () => {
   test("a URL first token becomes a remote http server", () => {
     const r = parseServerSpec(["https://mcp.example.com/"]);
