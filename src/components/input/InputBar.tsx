@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink";
 import { useEffect, useState } from "react";
 import { commandUsage, findCommand } from "../../lib/commandCatalog.ts";
 import { completeWith, suggestCommands } from "../../lib/commandSuggest.ts";
+import { deleteLastWord } from "../../lib/textFormat.ts";
 import { useStore } from "../../state/store.ts";
 import { ACCENT } from "../theme.ts";
 import { CommandMenu } from "./CommandMenu.tsx";
@@ -76,6 +77,11 @@ export function InputBar({
       if (key.escape) {
         if (value.length > 0) replaceValue("");
         else onEscape?.();
+        return;
+      }
+      // Ctrl/Option+Backspace deletes the last word (TextInput only does 1 char).
+      if (key.backspace && (key.ctrl || key.meta) && value.length > 0) {
+        replaceValue(deleteLastWord(value));
         return;
       }
       if (!menuOpen || matches.length === 0) return;
