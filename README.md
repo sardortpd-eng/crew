@@ -483,4 +483,10 @@ env -u ANTHROPIC_API_KEY bun run smoke:lead-run # (paid) one real lead delegatio
 env -u ANTHROPIC_API_KEY bun run shakedown  # full plan→build→verify→checkpoint dry run in a temp repo
 ```
 
+## License
+
+[GNU AGPL v3](LICENSE). You may use, modify, and share crew freely, but any modified version you
+distribute **or run as a network service** must also be released under the AGPL with its source
+available. (Using crew on your own machine carries no such obligation.)
+
 [sdk]: https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk

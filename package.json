@@ -2,6 +2,7 @@
   "name": "crew",
   "version": "0.1.0",
   "description": "A terminal UI for orchestrating multiple Claude agents on your subscription",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
     "bun": ">=1.1.0"
